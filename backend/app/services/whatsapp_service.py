@@ -297,9 +297,22 @@ class WhatsAppService:
             or message_type != "text"
         ):
             return
+
+        duplicate = self._db.scalar(
+            select(WhatsAppMessage).where(
+                WhatsAppMessage.provider_message_id == provider_message_id,
+            ),
+        )
+        if duplicate is not None:
+            return
+
         text = event.get("text")
         content = text.get("body") if isinstance(text, dict) else None
         if not isinstance(content, str):
+            return
+
+        normalized = content.strip()
+        if not normalized or len(normalized) > 4000:
             return
 
         try:
@@ -314,20 +327,18 @@ class WhatsAppService:
         )
         if not self._is_enabled(contact):
             return
-        if content.strip().casefold() == "stop":
+        if normalized.casefold() == "stop":
             self.unlink(contact.user_id)
             self._provider.send_text(
                 sender_phone,
                 "WhatsApp messages for your account have been turned off.",
             )
             return
-        if contains_phone_number(content):
+        if contains_phone_number(normalized):
             self._provider.send_text(
                 sender_phone,
                 "Phone numbers cannot be shared in platform messages.",
             )
-            return
-        if not content.strip() or len(content.strip()) > 4000:
             return
 
         conversation, message_content = self._resolve_conversation(

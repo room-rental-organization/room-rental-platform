@@ -111,6 +111,7 @@ class AssistantService:
             self._listings,
             self._areas.list_areas(),
             self._amenities.list_amenities(),
+            self._areas.resolve_area,
         )
         result = graph.invoke(
             {

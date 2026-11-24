@@ -281,7 +281,7 @@ export default function ListingDetailsPage({
             latitude: payload.approximate_latitude,
             longitude: payload.approximate_longitude,
           });
-        } else {
+        } else if (payload.has_map_location === true) {
           setIsLoadingMapLocation(true);
           try {
             const location = await getPublicListingMapLocation(
@@ -489,7 +489,7 @@ export default function ListingDetailsPage({
   }, [accessToken, listingId]);
 
   return (
-    <main
+    <main className="room-details-page"
       style={{
         minHeight: "100vh",
         background: "#f7f8fa",
@@ -586,7 +586,7 @@ export default function ListingDetailsPage({
               </div>
             )}
             <p style={{ color: "#476b55", margin: "24px 0 6px" }}>
-              {listing.room_type}
+              {listing.room_type.replaceAll("_", " ")}
             </p>
             <h1 style={{ fontSize: 32, margin: "0 0 16px" }}>
               {listing.title}

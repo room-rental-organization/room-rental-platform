@@ -110,6 +110,7 @@ export default function DashboardPage({
   onOpenReports,
 }: DashboardPageProps) {
   const content = dashboardContent[role];
+  const [activeView, setActiveView] = useState("overview");
   const [rentalInterestRefreshKey, setRentalInterestRefreshKey] = useState(0);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [contactRequestsError, setContactRequestsError] = useState<
@@ -450,11 +451,11 @@ export default function DashboardPage({
           new Date(second.requested_at).getTime() -
           new Date(first.requested_at).getTime(),
       )
-      .slice(0, 5);
+      .slice(0, activeView === "enquiries" ? undefined : 5);
 
     return (
       <main className="page-shell tenant-page">
-        <div className="tenant-dashboard">
+        <div className="tenant-dashboard" data-view={activeView}>
           <header className="tenant-topbar">
             <AppLink
               className="tenant-brand"
@@ -566,27 +567,53 @@ export default function DashboardPage({
             </article>
           </section>
 
+          <nav className="workspace-tabs" aria-label="Tenant workspace">
+            {[
+              ["overview", "Overview"],
+              ["saved", "Saved rooms & searches"],
+              ["enquiries", "Enquiries & reviews"],
+              ["future", "Future interests"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-current={activeView === value ? "page" : undefined}
+                onClick={() => setActiveView(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
           <div className="tenant-content-grid">
             <div className="tenant-main-column">
-              <RentalInterestNotificationsPanel
-                accessToken={accessToken}
-                onNavigate={onNavigate}
-              />
-              <TenantFutureRentalOpportunitiesPanel
-                accessToken={accessToken}
-                onNavigate={onNavigate}
-                onRegistered={() =>
-                  setRentalInterestRefreshKey((current) => current + 1)
-                }
-              />
-              <TenantRentalInterestsPanel
-                accessToken={accessToken}
-                onNavigate={onNavigate}
-                refreshKey={rentalInterestRefreshKey}
-              />
+              {activeView === "overview" && (
+                <div>
+                  <RentalInterestNotificationsPanel
+                    accessToken={accessToken}
+                    onNavigate={onNavigate}
+                  />
+                </div>
+              )}
+              {activeView === "future" && (
+                <div>
+                  <TenantFutureRentalOpportunitiesPanel
+                    accessToken={accessToken}
+                    onNavigate={onNavigate}
+                    onRegistered={() =>
+                      setRentalInterestRefreshKey((current) => current + 1)
+                    }
+                  />
+                  <TenantRentalInterestsPanel
+                    accessToken={accessToken}
+                    onNavigate={onNavigate}
+                    refreshKey={rentalInterestRefreshKey}
+                  />
+                </div>
+              )}
               <section
                 aria-labelledby="contact-requests-heading"
                 className="tenant-panel tenant-requests-panel"
+                hidden={activeView !== "overview" && activeView !== "enquiries"}
               >
                 <div className="tenant-panel-heading">
                   <div>
@@ -595,7 +622,7 @@ export default function DashboardPage({
                     </p>
                     <h2 id="contact-requests-heading">Your enquiries</h2>
                   </div>
-                  {contactRequests.length > 5 && (
+                  {activeView === "overview" && contactRequests.length > 5 && (
                     <span className="tenant-count">
                       Latest 5 of {contactRequests.length}
                     </span>
@@ -845,6 +872,7 @@ export default function DashboardPage({
               </section>
 
               <section
+                hidden={activeView !== "overview" && activeView !== "saved"}
                 aria-labelledby="saved-listings-heading"
                 className="tenant-panel"
               >
@@ -886,7 +914,8 @@ export default function DashboardPage({
                   savedListings.length > 0 && (
                     <ul className="tenant-saved-search-list">
                       {savedListings.map((listing) => (
-                        <li key={listing.listing_id}>
+                        <li className="tenant-saved-room" key={listing.listing_id}>
+                          {listing.photos[0] && <img className="tenant-saved-room-cover" src={listing.photos[0].url} alt="" loading="lazy" />}
                           <div>
                             <strong>{listing.title}</strong>
                             <time>
@@ -929,6 +958,7 @@ export default function DashboardPage({
               </section>
 
               <section
+                hidden={activeView !== "saved"}
                 aria-labelledby="saved-searches-heading"
                 className="tenant-panel tenant-saved-searches"
               >

@@ -121,6 +121,7 @@ export default function LandlordDashboardPage({
   profile,
   onSignOut,
 }: LandlordDashboardPageProps) {
+  const [activeView, setActiveView] = useState("overview");
   const [listings, setListings] = useState<Listing[]>([]);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -146,6 +147,11 @@ export default function LandlordDashboardPage({
   const [updatingContactRequestId, setUpdatingContactRequestId] = useState<
     number | null
   >(null);
+
+  function openWorkspace(view: string): void {
+    setActiveView(view);
+    window.scrollTo({ top: 0 });
+  }
 
   async function refreshListings(): Promise<void> {
     setListings(await getMyListings(accessToken));
@@ -327,6 +333,7 @@ export default function LandlordDashboardPage({
   function startEditing(listing: Listing): void {
     setMapSearchAddress(listing.address);
     setEditingListingId(listing.listing_id);
+    setActiveView("editor");
     setForm({
       areaName:
         listing.area_name ??
@@ -353,6 +360,7 @@ export default function LandlordDashboardPage({
     setMapSearchAddress("");
     setEditingListingId(null);
     setForm(emptyForm);
+    setActiveView("listings");
     setErrorMessage(null);
     setNotice(null);
   }
@@ -409,6 +417,7 @@ export default function LandlordDashboardPage({
       setForm(emptyForm);
       setMapSearchAddress("");
       await refreshListings();
+      setActiveView("listings");
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error));
     } finally {
@@ -497,7 +506,7 @@ export default function LandlordDashboardPage({
   );
 
   return (
-    <main className="page-shell landlord-page">
+    <main className="page-shell landlord-page" data-view={activeView}>
       <aside aria-label="Landlord workspace" className="landlord-sidebar">
         <AppLink
           className="landlord-brand"
@@ -514,24 +523,24 @@ export default function LandlordDashboardPage({
         </AppLink>
         <p className="landlord-nav-label">WORKSPACE</p>
         <nav aria-label="Dashboard sections" className="landlord-sidebar-nav">
-          <a className="active" href="#overview">
+          <button type="button" className={activeView === "overview" ? "active" : ""} aria-current={activeView === "overview" ? "page" : undefined} onClick={() => openWorkspace("overview")}>
             <span aria-hidden="true">▦</span> Dashboard
-          </a>
-          <a href="#my-listings-heading">
+          </button>
+          <button type="button" className={activeView === "listings" ? "active" : ""} aria-current={activeView === "listings" ? "page" : undefined} onClick={() => openWorkspace("listings")}>
             <span aria-hidden="true">⌂</span> Listings
-          </a>
+          </button>
           <AppLink href="/conversations" onNavigate={onNavigate}>
             <span aria-hidden="true">▤</span> Messages
           </AppLink>
-          <a href="#contact-requests-heading">
+          <button type="button" className={activeView === "enquiries" ? "active" : ""} aria-current={activeView === "enquiries" ? "page" : undefined} onClick={() => openWorkspace("enquiries")}>
             <span aria-hidden="true">◷</span> Inquiries
             {pendingRequestCount > 0 && (
               <span className="landlord-nav-count">{pendingRequestCount}</span>
             )}
-          </a>
-          <a href="#future-interest">
+          </button>
+          <button type="button" className={activeView === "future" ? "active" : ""} aria-current={activeView === "future" ? "page" : undefined} onClick={() => openWorkspace("future")}>
             <span aria-hidden="true">⌁</span> Future interest
-          </a>
+          </button>
         </nav>
         <div className="landlord-sidebar-bottom">
           <AppLink href="/" onNavigate={onNavigate}>
@@ -549,7 +558,7 @@ export default function LandlordDashboardPage({
               {landlordInitials}
             </span>
             <p className="eyebrow">LANDLORD WORKSPACE</p>
-            <h1>Good day, {profile.full_name.trim().split(/\s+/)[0]}</h1>
+            <h1>{activeView === "overview" ? `Good day, ${profile.full_name.trim().split(/\s+/)[0]}` : ({ listings: "Your listings", enquiries: "Tenant enquiries", future: "Future rental interests", editor: editingListingId === null ? "Create a listing" : "Edit listing" } as Record<string, string>)[activeView]}</h1>
             <p>Manage your properties and keep up with tenant enquiries.</p>
           </div>
           <div className="landlord-header-tools">
@@ -576,9 +585,7 @@ export default function LandlordDashboardPage({
             <button
               className="primary-button landlord-add-listing"
               onClick={() =>
-                document
-                  .getElementById("listing-form-heading")
-                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                { setEditingListingId(null); setForm(emptyForm); setMapSearchAddress(""); setActiveView("editor"); }
               }
               type="button"
             >
@@ -587,7 +594,7 @@ export default function LandlordDashboardPage({
           </div>
         </header>
 
-        <section
+        <section hidden={activeView !== "overview"}
           aria-labelledby="landlord-overview-heading"
           className="landlord-overview"
           id="overview"
@@ -650,14 +657,14 @@ export default function LandlordDashboardPage({
           </p>
         )}
 
-        {!isLoading && (
+        {activeView === "overview" && !isLoading && (
           <RentalInterestNotificationsPanel
             accessToken={accessToken}
             onNavigate={onNavigate}
           />
         )}
 
-        {!isLoading && (
+        {activeView === "future" && !isLoading && (
           <LandlordRentalInterestsPanel
             accessToken={accessToken}
             listings={listings}
@@ -665,7 +672,7 @@ export default function LandlordDashboardPage({
         )}
 
         <div className="landlord-dashboard-grid">
-          <aside className="landlord-inquiries-column">
+          <aside className="landlord-inquiries-column" hidden={activeView !== "overview" && activeView !== "enquiries"}>
           <section
             className="landlord-panel landlord-inquiries-panel"
             aria-labelledby="contact-requests-heading"
@@ -789,8 +796,8 @@ export default function LandlordDashboardPage({
         </section>
           </aside>
 
-          <div className="landlord-primary-column">
-        <section
+          <div className="landlord-primary-column" hidden={activeView === "enquiries" || activeView === "future"}>
+        {activeView === "editor" && <section
           className="landlord-panel landlord-form-panel"
           aria-labelledby="listing-form-heading"
           id="listing-form"
@@ -802,6 +809,7 @@ export default function LandlordDashboardPage({
                 {editingListingId === null ? "Create a listing" : "Edit listing"}
               </h2>
             </div>
+            <button className="secondary-button" type="button" onClick={cancelEditing}>Back to listings</button>
             <span className="landlord-form-hint">
               {editingListingId === null
                 ? "New listings start as drafts"
@@ -809,6 +817,7 @@ export default function LandlordDashboardPage({
             </span>
           </div>
           <form className="landlord-form" onSubmit={handleSubmit}>
+            <h3 className="editor-section-title">1. Introduce your room</h3>
             <label>
               Listing title
               <input
@@ -829,6 +838,7 @@ export default function LandlordDashboardPage({
                 value={form.description}
               />
             </label>
+            <h3 className="editor-section-title">2. Location, price &amp; availability</h3>
             <div className="landlord-form-grid">
               <label>
                 Area or suburb
@@ -1010,10 +1020,11 @@ export default function LandlordDashboardPage({
               )}
             </div>
           </form>
-        </section>
+        </section>}
 
         <section
           className="landlord-panel landlord-listings-panel"
+          hidden={activeView !== "listings" && activeView !== "overview"}
           aria-labelledby="my-listings-heading"
           id="listings"
         >
@@ -1048,7 +1059,7 @@ export default function LandlordDashboardPage({
           {isLoading && <p role="status">Loading your listings...</p>}
           {!isLoading && listings.length === 0 && (
             <p className="landlord-empty-state">
-              You do not have any listings yet. Use the form above to create
+              You do not have any listings yet. Choose Add a new listing to create
               your first draft.
             </p>
           )}
@@ -1061,7 +1072,7 @@ export default function LandlordDashboardPage({
             )}
           {!isLoading && filteredListings.length > 0 && (
             <ul className="landlord-list">
-              {filteredListings.map((listing) => (
+              {(activeView === "overview" ? filteredListings.slice(0, 3) : filteredListings).map((listing) => (
                 <li className="landlord-listing" key={listing.listing_id}>
                   {listing.photos.length > 0 ? (
                     <img
@@ -1170,6 +1181,9 @@ export default function LandlordDashboardPage({
               ))}
             </ul>
           )}
+        {activeView === "overview" && filteredListings.length > 3 && (
+          <button className="secondary-button" type="button" onClick={() => openWorkspace("listings")}>View all {filteredListings.length} listings &rarr;</button>
+        )}
         </section>
           </div>
         </div>

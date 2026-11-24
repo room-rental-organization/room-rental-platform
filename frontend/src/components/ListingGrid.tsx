@@ -10,7 +10,7 @@ export default function ListingGrid({
   onNavigate,
 }: ListingGridProps) {
   return (
-    <ul
+    <ul className="room-grid"
       style={{
         display: "grid",
         gap: 20,

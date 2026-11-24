@@ -81,6 +81,7 @@ function App() {
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -252,6 +253,7 @@ function App() {
       setAccessToken(tokenResponse.access_token);
       setProfile(currentProfile);
       setFields(emptyForm);
+      setShowPassword(false);
       setSessionRestoreError(null);
       setSessionNotice(null);
       const returnPath = getListingReturnPath();
@@ -450,7 +452,19 @@ function App() {
   const isRegistering = mode === "register";
 
   return (
-    <main className="page-shell">
+    <main className="auth-shell">
+      <aside className="auth-story">
+        <AppLink className="modern-brand" href="/" onNavigate={navigate}>
+          <span>R</span> Room Rentals
+        </AppLink>
+        <div>
+          <p className="eyebrow">A SPACE FOR YOUR NEXT CHAPTER</p>
+          <h2>Good things start<br />with a place to call home.</h2>
+          <p>Find your next room. Meet your next tenant. Make your next move with confidence.</p>
+          <div className="auth-home-art" aria-hidden="true"><span>&#8962;</span></div>
+        </div>
+        <p className="auth-story-foot">Your search. Your space. Your next chapter.</p>
+      </aside>
       <section className="auth-card" aria-labelledby="auth-heading">
         <p className="eyebrow">Room Rentals</p>
         <h1 id="auth-heading">
@@ -564,10 +578,21 @@ function App() {
               minLength={isRegistering ? 8 : 1}
               onChange={(event) => updateField("password", event.target.value)}
               required
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={fields.password}
             />
           </label>
+          <div className="password-tools">
+            <label>
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(event) => setShowPassword(event.target.checked)}
+              />
+              Show password
+            </label>
+            {isRegistering && <small>Use 8 to 128 characters.</small>}
+          </div>
 
           {isRegistering && registrationRole === "landlord" && (
             <label>

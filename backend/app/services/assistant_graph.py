@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 from typing import Any, Literal, TypedDict
@@ -169,6 +170,18 @@ def _call_provider(
     return response_model.model_validate(json.loads(content))
 
 
+def _provider_failure_summary(error: Exception) -> str:
+    if isinstance(error, httpx.HTTPStatusError):
+        return f"HTTP {error.response.status_code}"
+    if isinstance(error, ValidationError):
+        return f"response validation failed ({len(error.errors())} errors)"
+    if isinstance(error, json.JSONDecodeError):
+        return "response was not valid JSON"
+    if isinstance(error, httpx.TimeoutException):
+        return "request timed out"
+    return type(error).__name__
+
+
 def complete_json(
     settings: Settings,
     system_prompt: str,
@@ -243,10 +256,10 @@ def complete_json(
             ) as exc:
                 last_error = exc
                 logger.warning(
-                    "AI provider %s failed on attempt %s (%s)",
+                    "AI provider %s failed on attempt %s: %s",
                     provider,
                     attempt + 1,
-                    type(exc).__name__,
+                    _provider_failure_summary(exc),
                 )
                 if provider == "inception" and attempt + 1 < attempts:
                     delay = min(
@@ -293,6 +306,7 @@ def build_assistant_graph(
     listing_service: ListingService,
     areas: list[AreaResponse],
     amenities: list[AmenityResponse],
+    area_resolver: Callable[[str], AreaResponse],
 ) -> Any:
     area_names = {area.area_id: area.name for area in areas}
     available_amenities = {amenity.name for amenity in amenities}
@@ -512,7 +526,10 @@ def build_assistant_graph(
             "landlord has listed amenities or said there are none. Otherwise "
             "leave it null. Dates must be ISO YYYY-MM-DD. Today's date is "
             f"{date.today().isoformat()}. Existing draft: {current_draft}. "
-            f"Available areas: {[area.name for area in areas]}. "
+            "The landlord may use any area, suburb, town, or city; do not "
+            "restrict the area to existing records or ask them to choose from "
+            "a fixed list. Existing areas are only examples for matching: "
+            f"{[area.name for area in areas]}. "
             f"Available amenities: {sorted(available_amenities)}."
         )
         turn = complete_json(
@@ -526,7 +543,7 @@ def build_assistant_graph(
         workflow_state = dict(state["workflow_state"])
 
         area_name = turn.area_name.strip() if turn.area_name else None
-        if area_name is not None:
+        if area_name:
             area = next(
                 (
                     item
@@ -535,12 +552,10 @@ def build_assistant_graph(
                 ),
                 None,
             )
-            if area is not None:
-                current_draft["area_id"] = area.area_id
-                current_draft["area_name"] = area.name
-            else:
-                current_draft["area_id"] = None
-                current_draft["area_name"] = area_name
+            area = area or area_resolver(area_name)
+            area_names[area.area_id] = area.name
+            current_draft["area_id"] = area.area_id
+            current_draft["area_name"] = area.name
 
         for field in (
             "title",
@@ -609,8 +624,6 @@ def build_assistant_graph(
             else:
                 response = _landlord_follow_up(
                     missing_fields,
-                    current_draft.get("area_name"),
-                    [area.name for area in areas],
                     sorted(available_amenities),
                 )
             draft_payload = {
@@ -712,20 +725,13 @@ def _missing_listing_fields(
 
 def _landlord_follow_up(
     missing_fields: list[str],
-    area_value: str | None,
-    available_areas: list[str],
     available_amenities: list[str],
 ) -> str:
     next_field = missing_fields[0]
     if next_field == "area":
-        if area_value:
-            return (
-                f"I couldn't match '{area_value}' to a platform area. "
-                f"Please choose one of: {', '.join(available_areas)}."
-            )
         return (
-            "Which area is the room in? Please choose from: "
-            f"{', '.join(available_areas)}."
+            "Which area, suburb, town, or city is the room in? "
+            "You can enter any location."
         )
     questions = {
         "room type": (

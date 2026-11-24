@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 
 import GoogleAddressSearch, {
   type GoogleAddressSelection,
@@ -26,18 +26,6 @@ type SearchFiltersProps = {
   hasLocationSelection: boolean;
 };
 
-const fieldStyle = {
-  background: "white",
-  border: "1px solid #cbd3dd",
-  borderRadius: 8,
-  boxSizing: "border-box" as const,
-  color: "#182230",
-  font: "inherit",
-  minHeight: 42,
-  padding: "8px 10px",
-  width: "100%",
-};
-
 export default function SearchFilters({
   amenities,
   availableBy,
@@ -49,6 +37,7 @@ export default function SearchFilters({
   radius,
   hasLocationSelection,
 }: SearchFiltersProps) {
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   function updateField(
     field: keyof ListingFilters,
     value: string,
@@ -77,144 +66,21 @@ export default function SearchFilters({
   }
 
   return (
-    <section
-      aria-label="Filter listings"
-      className="search-filters"
-      style={{
-        background: "white",
-        border: "1px solid #e3e7ed",
-        borderRadius: 14,
-        display: "grid",
-        gap: 16,
-        marginBottom: 24,
-        padding: 20,
-      }}
-    >
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Suburb, city or province
-        <GoogleAddressSearch
-          onChange={(value) => updateField("location", value)}
-          onResultSelected={onLocationSelected}
-          value={filters.location}
-        />
-      </label>
-
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Search radius
-        <select
-          disabled={!hasLocationSelection}
-          onChange={(event) =>
-            onRadiusChange(event.currentTarget.value === "10" ? 10 : 5)
-          }
-          style={fieldStyle}
-          value={radius}
-        >
-          <option value={5}>Within 5 km</option>
-          <option value={10}>Within 10 km</option>
-        </select>
-        {!hasLocationSelection && (
-          <small>Select a Google Maps location to enable radius search.</small>
-        )}
-        {hasLocationSelection && (
-          <small>Radius matches use private listing coordinates.</small>
-        )}
-      </label>
-
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Room type
-        <select
-          onChange={(event) => updateField("roomType", event.currentTarget.value)}
-          style={fieldStyle}
-          value={filters.roomType}
-        >
-          <option value="">All room types</option>
-          <option value="single_room">Single room</option>
-          <option value="shared_room">Shared room</option>
-          <option value="bachelor_flat">Bachelor flat</option>
-          <option value="self_contained">Self-contained</option>
-        </select>
-      </label>
-
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Minimum monthly rent
-        <input
-          min="0"
-          onChange={(event) => updateRent("minimumRent", event)}
-          placeholder="No minimum"
-          style={fieldStyle}
-          type="number"
-          value={filters.minimumRent}
-        />
-      </label>
-
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Maximum monthly rent
-        <input
-          min="0"
-          onChange={(event) => updateRent("maximumRent", event)}
-          placeholder="No maximum"
-          style={fieldStyle}
-          type="number"
-          value={filters.maximumRent}
-        />
-      </label>
-
-      <label
-        className="search-filter-field"
-        style={{ color: "#344054", display: "grid", gap: 6 }}
-      >
-        Available on or before
-        <input
-          onChange={(event) => onAvailabilityChange(event.currentTarget.value)}
-          style={fieldStyle}
-          type="date"
-          value={availableBy}
-        />
-        <small>Leave blank to include any availability date.</small>
-      </label>
-
-      <fieldset
-        className="search-filter-amenities"
-        style={{
-          border: 0,
-          display: "grid",
-          gap: 8,
-          margin: 0,
-          padding: 0,
-        }}
-      >
-        <legend style={{ color: "#344054", marginBottom: 6 }}>Amenities</legend>
-        {amenities.map((amenity) => (
-          <label
-            key={amenity.amenity_id}
-            style={{ alignItems: "center", display: "flex", gap: 8 }}
-          >
-            <input
-              checked={filters.amenities.includes(amenity.name)}
-              onChange={(event) =>
-                toggleAmenity(amenity.name, event.currentTarget.checked)
-              }
-              type="checkbox"
-            />
-            {amenity.name}
-          </label>
-        ))}
-      </fieldset>
+    <section aria-label="Filter listings" className="discovery-search">
+      <div className="search-primary">
+        <div className="search-location"><label className="field-label" htmlFor="room-location">Where would you like to live?</label><input id="room-location" type="search" placeholder="Try Sandton, Rosebank or your suburb" value={filters.location} onChange={(event) => updateField("location", event.target.value)} /></div>
+        <label>Room type<select value={filters.roomType} onChange={(event) => updateField("roomType", event.target.value)}><option value="">Any room type</option><option value="single_room">Single room</option><option value="shared_room">Shared room</option><option value="bachelor_flat">Bachelor flat</option><option value="self_contained">Self-contained</option></select></label>
+        <label>Monthly budget (R)<input type="number" min="0" placeholder="Your maximum" value={filters.maximumRent} onChange={(event) => updateRent("maximumRent", event)} /></label>
+        <button type="button" className="filter-toggle" aria-expanded={advancedOpen} aria-controls="advanced-room-filters" onClick={() => setAdvancedOpen(!advancedOpen)}>Filters {filters.amenities.length > 0 ? `(${filters.amenities.length})` : "+"}</button>
+      </div>
+      <div id="advanced-room-filters" hidden={!advancedOpen} className="search-advanced">
+        <div className="search-advanced-grid"><div><p className="field-label">Search near a place</p>{advancedOpen && <GoogleAddressSearch value={filters.location} onChange={(value) => updateField("location", value)} onResultSelected={onLocationSelected} />}</div>
+        <label>Distance<select value={radius} disabled={!hasLocationSelection} onChange={(event) => onRadiusChange(event.target.value === "10" ? 10 : 5)}><option value={5}>Within 5 km</option><option value={10}>Within 10 km</option></select><small>{hasLocationSelection ? "Distance from your selected place." : "Select a place to search by distance."}</small></label>
+        <label>Minimum rent (R)<input type="number" min="0" placeholder="No minimum" value={filters.minimumRent} onChange={(event) => updateRent("minimumRent", event)} /></label>
+        <label>Move in by<input type="date" value={availableBy} onChange={(event) => onAvailabilityChange(event.target.value)} /></label></div>
+        <fieldset className="amenity-picker"><legend>Make yourself at home</legend>{amenities.map((amenity) => <label key={amenity.amenity_id}><input type="checkbox" checked={filters.amenities.includes(amenity.name)} onChange={(event) => toggleAmenity(amenity.name, event.target.checked)} />{amenity.name}</label>)}</fieldset>
+        <button type="button" className="text-button" onClick={() => { onChange({ location: "", roomType: "", minimumRent: "", maximumRent: "", amenities: [] }); onAvailabilityChange(""); onRadiusChange(5); }}>Clear all filters</button>
+      </div>
     </section>
   );
 }

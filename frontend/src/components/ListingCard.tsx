@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Listing } from "../types/listing";
 import AppLink from "./AppLink";
 
@@ -8,121 +9,65 @@ type ListingCardProps = {
   onNavigate: (path: string) => void;
 };
 
-function formatRent(value: string | number): string {
-  const amount = Number(value);
-  if (!Number.isFinite(amount)) {
-    return "Rent unavailable";
-  }
-
-  return new Intl.NumberFormat("en-ZA", {
-    style: "currency",
-    currency: "ZAR",
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-function formatAvailability(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) {
-    return "Availability date unavailable";
-  }
-
-  return `Available ${new Intl.DateTimeFormat("en-ZA", {
-    dateStyle: "medium",
-  }).format(date)}`;
-}
-
-export default function ListingCard({
-  listing,
-  onNavigate,
-}: ListingCardProps) {
+export default function ListingCard({ listing, onNavigate }: ListingCardProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const roomType = listing.room_type.replaceAll("_", " ");
+  const amount = Number(listing.monthly_rent);
+  const rent = Number.isFinite(amount)
+    ? new Intl.NumberFormat("en-ZA", {
+        style: "currency",
+        currency: "ZAR",
+        maximumFractionDigits: 2,
+      }).format(amount)
+    : "Rent unavailable";
+  const date = new Date(`${listing.date_available}T00:00:00`);
+  const available = Number.isNaN(date.getTime()) ? "Ask about availability" : `Available ${new Intl.DateTimeFormat("en-ZA", { day: "numeric", month: "short", year: "numeric" }).format(date)}`;
   return (
-    <article
-      aria-labelledby={`listing-${listing.listing_id}`}
-      style={{
-        background: "white",
-        border: "1px solid #e3e7ed",
-        borderRadius: 14,
-        overflow: "hidden",
-      }}
-    >
-      {listing.photos[0] ? (
-        <img
-          alt={`Room interior for ${listing.title}`}
-          height={150}
-          src={listing.photos[0].url}
-          style={{ display: "block", height: 150, objectFit: "cover", width: "100%" }}
-        />
-      ) : (
-        <div
-          aria-hidden="true"
-          style={{
-            alignItems: "center",
-            background: "linear-gradient(135deg, #dce9df, #f1e8d8)",
-            color: "#355b43",
-            display: "flex",
-            fontSize: 14,
-            fontWeight: 600,
-            height: 150,
-            justifyContent: "center",
-          }}
-        >
-          Room photo
-        </div>
-      )}
-      <div style={{ padding: 20 }}>
-        <p style={{ color: "#476b55", margin: "0 0 6px" }}>
-          {listing.room_type}
-        </p>
-        <h2
-          id={`listing-${listing.listing_id}`}
-          style={{ fontSize: 20, margin: "0 0 8px" }}
-        >
-          {listing.title}
-        </h2>
-        <p
-          style={{
-            color: "#596579",
-            lineHeight: 1.5,
-            margin: "0 0 14px",
-          }}
-        >
-          {listing.description}
-        </p>
-        <p style={{ fontWeight: 700, margin: "0 0 8px" }}>
-          {formatRent(listing.monthly_rent)}{" "}
-          <span style={{ color: "#596579", fontWeight: 400 }}>/ month</span>
-        </p>
-        <p style={{ color: "#596579", margin: "0 0 6px" }}>
-          {listing.address}
-        </p>
-        <p style={{ color: "#596579", margin: "0 0 6px" }}>
-          {listing.area_name ?? `Area #${listing.area_id}`}
-        </p>
-        <p style={{ color: "#596579", margin: 0 }}>
-          {formatAvailability(listing.date_available)}
-        </p>
-        {listing.amenities.length > 0 && (
-          <p aria-label="Amenities" style={{ color: "#596579" }}>
-            Amenities: {listing.amenities.join(", ")}
-          </p>
+    <article className="room-card" aria-labelledby={`listing-${listing.listing_id}`}>
+      <AppLink
+        className="room-card-image"
+        href={`/listings/${listing.listing_id}`}
+        onNavigate={onNavigate}
+        aria-label={`View ${listing.title}`}
+      >
+        {listing.photos[0] && !imageFailed ? (
+          <img
+            alt={`Room interior for ${listing.title}`}
+            src={listing.photos[0].url}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <div className="room-photo-placeholder">
+            <span aria-hidden="true">&#8962;</span>
+            <small>Your next space</small>
+          </div>
         )}
-        <AppLink
-          href={`/listings/${listing.listing_id}`}
-          onNavigate={onNavigate}
-          style={{
-            background: "#244b35",
-            borderRadius: 8,
-            color: "white",
-            display: "inline-block",
-            fontWeight: 600,
-            marginTop: 16,
-            padding: "10px 14px",
-            textDecoration: "none",
-          }}
-        >
-          View details
-        </AppLink>
+        <span className="room-type-badge">{roomType}</span>
+      </AppLink>
+      <div className="room-card-body">
+        <p className="room-card-location">{listing.area_name ?? listing.address}</p>
+        <h2 id={`listing-${listing.listing_id}`}>
+          <AppLink href={`/listings/${listing.listing_id}`} onNavigate={onNavigate}>
+            {listing.title}
+          </AppLink>
+        </h2>
+        <p className="room-card-description">{listing.description}</p>
+        <div className="room-amenities" aria-label="Amenities">
+          {listing.amenities.slice(0, 3).map(amenity => <span key={amenity}>{amenity}</span>)}
+          {listing.amenities.length > 3 && <span>+{listing.amenities.length - 3}</span>}
+        </div>
+        <p className="room-card-availability">{available}</p>
+        <div className="room-card-bottom">
+          <p><strong>{rent}</strong><span> / month</span></p>
+          <AppLink
+            href={`/listings/${listing.listing_id}`}
+            onNavigate={onNavigate}
+            aria-label={`View details for ${listing.title}`}
+          >
+            View room &#8599;
+          </AppLink>
+        </div>
       </div>
     </article>
   );

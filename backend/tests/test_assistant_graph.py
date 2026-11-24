@@ -81,6 +81,19 @@ class AssistantGraphTests(unittest.TestCase):
             ),
         ]
         self.listing_service = FakeListingService(self.listings)
+        self.resolved_area_names: list[str] = []
+
+    def resolve_area(self, name: str) -> AreaResponse:
+        self.resolved_area_names.append(name)
+        existing_area = next(
+            (
+                area
+                for area in self.areas
+                if area.name.casefold() == name.casefold()
+            ),
+            None,
+        )
+        return existing_area or AreaResponse(area_id=3, name=name)
 
     def build_graph(self):
         return build_assistant_graph(
@@ -88,6 +101,7 @@ class AssistantGraphTests(unittest.TestCase):
             self.listing_service,
             self.areas,
             self.amenities,
+            self.resolve_area,
         )
 
     def test_tenant_search_returns_only_service_listings_matching_filters(
@@ -231,15 +245,24 @@ class AssistantGraphTests(unittest.TestCase):
         self.assertEqual(result["draft"]["amenities"], ["Wi-Fi"])
         self.assertIn("confirm", result["response"])
 
-    def test_landlord_workflow_asks_for_missing_area_from_real_catalog(
+    def test_landlord_workflow_accepts_an_area_outside_the_existing_catalog(
         self,
     ) -> None:
         with patch(
             "app.services.assistant_graph.complete_json",
             return_value=LandlordTurn(
+                area_name="KwaMashu",
+                title="Room in KwaMashu",
+                description="A private room in a shared property.",
+                room_type="single_room",
                 monthly_rent=Decimal("3000"),
+                deposit_amount=Decimal("1000"),
+                address="12 Example Road",
+                date_available=date(2026, 12, 1),
+                amenities=[],
+                amenities_answered=True,
             ),
-        ):
+        ) as complete_json:
             result = self.build_graph().invoke(
                 {
                     "role": "landlord",
@@ -249,9 +272,28 @@ class AssistantGraphTests(unittest.TestCase):
                 },
             )
 
-        self.assertFalse(result["draft"]["ready_to_confirm"])
-        self.assertIn("Glenwood", result["response"])
-        self.assertIn("Umbilo", result["response"])
+        self.assertTrue(result["draft"]["ready_to_confirm"])
+        self.assertEqual(result["draft"]["area_id"], 3)
+        self.assertEqual(result["draft"]["area_name"], "KwaMashu")
+        self.assertEqual(self.resolved_area_names, ["KwaMashu"])
+        self.assertIn("any area", complete_json.call_args.args[1])
+
+    def test_landlord_area_follow_up_accepts_any_area(self) -> None:
+        with patch(
+            "app.services.assistant_graph.complete_json",
+            return_value=LandlordTurn(),
+        ):
+            result = self.build_graph().invoke(
+                {
+                    "role": "landlord",
+                    "message": "Help me list a room.",
+                    "history": [],
+                    "workflow_state": {},
+                },
+            )
+
+        self.assertIn("You can enter any location", result["response"])
+        self.assertNotIn("choose from", result["response"])
 
     def test_unsupported_landlord_amenity_requires_a_valid_choice(self) -> None:
         existing_draft = {
@@ -323,6 +365,42 @@ class AssistantGraphTests(unittest.TestCase):
             [call.args[0] for call in call_provider.call_args_list],
             ["inception", "inception", "inception", "groq"],
         )
+
+    def test_provider_http_failure_logs_status_without_response_body(self) -> None:
+        settings = Settings(
+            database_url="sqlite://",
+            inception_api_key=None,
+            groq_api_key="groq-key",
+        )
+        request = httpx.Request("POST", "https://api.groq.com/")
+        response = httpx.Response(
+            401,
+            request=request,
+            text="private provider response",
+        )
+        provider_error = httpx.HTTPStatusError(
+            "provider rejected request",
+            request=request,
+            response=response,
+        )
+        with (
+            patch(
+                "app.services.assistant_graph._call_provider",
+                side_effect=provider_error,
+            ),
+            self.assertLogs("app.services.assistant_graph", level="WARNING") as logs,
+        ):
+            with self.assertRaises(AssistantProviderError):
+                complete_json(
+                    settings,
+                    "prompt",
+                    [],
+                    "message",
+                    TenantTurn,
+                )
+
+        self.assertIn("HTTP 401", logs.output[0])
+        self.assertNotIn("private provider response", logs.output[0])
 
     def test_missing_provider_keys_are_reported(self) -> None:
         with self.assertRaises(AssistantProviderError):

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   approveListing,
@@ -45,6 +45,8 @@ export default function AdminModerationDashboardPage({
   onOpenReports,
   onSignOut,
 }: AdminModerationDashboardPageProps) {
+  const [selectedListingId, setSelectedListingId] = useState<number | null>(null);
+  const reviewDialog = useRef<HTMLDialogElement>(null);
   const [pendingListings, setPendingListings] = useState<Listing[]>([]);
   const [publishedListings, setPublishedListings] = useState<Listing[]>([]);
   const [listingView, setListingView] = useState<"pending" | "published">(
@@ -61,6 +63,16 @@ export default function AdminModerationDashboardPage({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const selectedListing = [...pendingListings, ...publishedListings].find(
+    item => item.listing_id === selectedListingId,
+  );
+  useEffect(() => {
+    if (selectedListing !== undefined) {
+      if (!reviewDialog.current?.open) reviewDialog.current?.showModal();
+    } else {
+      reviewDialog.current?.close();
+    }
+  }, [selectedListing]);
   const currentListings =
     listingView === "pending" ? pendingListings : publishedListings;
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
@@ -170,7 +182,15 @@ export default function AdminModerationDashboardPage({
     }
   }
 
-  function renderListing(listing: Listing, isPublished: boolean) {
+  function renderListing(listing: Listing, isPublished: boolean, detail = false) {
+    if (!detail) return <li className="admin-listing-row" key={listing.listing_id}>
+      {listing.photos[0] ? <img src={listing.photos[0].url} alt="" loading="lazy" /> : <span className="admin-row-placeholder" aria-hidden="true">&#8962;</span>}
+      <div><span className="eyebrow">{listing.area_name ?? listing.room_type.replaceAll("_", " ")}</span><h3>{listing.title}</h3><p>{listing.address}</p></div>
+      <div className="admin-row-price"><strong>R {Number(listing.monthly_rent).toLocaleString("en-ZA")}</strong><small>per month</small></div>
+      <span className={`moderation-status ${isPublished ? "is-published" : "is-pending"}`}>{isPublished ? "Published" : "Needs review"}</span>
+      <button className="secondary-button" type="button" onClick={() => setSelectedListingId(listing.listing_id)} aria-label={`Review ${listing.title}`}>Review &rarr;</button>
+    </li>;
+
     const reason = reasons[listing.listing_id] ?? "";
     const historyIsExpanded = expandedHistory.includes(listing.listing_id);
     const history = histories[listing.listing_id];
@@ -339,6 +359,12 @@ export default function AdminModerationDashboardPage({
 
   return (
     <main className="admin-dashboard">
+      <dialog className="review-dialog" ref={reviewDialog} onCancel={() => setSelectedListingId(null)} onClose={() => setSelectedListingId(null)} aria-labelledby="review-dialog-heading">
+        <header><div><p className="eyebrow">LISTING DETAILS</p><h2 id="review-dialog-heading">Review this room</h2></div><button className="secondary-button" type="button" onClick={() => setSelectedListingId(null)} aria-label="Close listing review">Close &times;</button></header>
+        {notice && <p className="message message-success" role="status">{notice}</p>}
+        {errorMessage && <p className="message message-error" role="alert">{errorMessage}</p>}
+        {selectedListing && <ul className="review-dialog-content">{renderListing(selectedListing, selectedListing.status === "active", true)}</ul>}
+      </dialog>
       <aside className="admin-sidebar" aria-label="Admin navigation">
         <a className="admin-brand" href="/" aria-label="Room Rentals home">
           <span aria-hidden="true">R</span>
@@ -430,7 +456,7 @@ export default function AdminModerationDashboardPage({
               </span>
               <div>
                 <p>Needs review</p>
-                <strong>{pendingListings.length}</strong>
+                <strong>{isLoading ? "..." : pendingListings.length}</strong>
                 <small>Listings awaiting a decision</small>
               </div>
             </article>
@@ -440,7 +466,7 @@ export default function AdminModerationDashboardPage({
               </span>
               <div>
                 <p>Published</p>
-                <strong>{publishedListings.length}</strong>
+                <strong>{isLoading ? "..." : publishedListings.length}</strong>
                 <small>Listings currently published</small>
               </div>
             </article>
@@ -451,7 +477,7 @@ export default function AdminModerationDashboardPage({
               <div>
                 <p>Listings in view</p>
                 <strong>
-                  {pendingListings.length + publishedListings.length}
+                  {isLoading ? "..." : pendingListings.length + publishedListings.length}
                 </strong>
                 <small>Pending and published listings</small>
               </div>

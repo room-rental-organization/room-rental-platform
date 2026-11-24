@@ -151,6 +151,7 @@ export default function ListingsPage({
   sessionRestoreError,
 }: ListingsPageProps) {
   const [listings, setListings] = useState<Listing[]>([]);
+  const [resultsView, setResultsView] = useState<"list" | "map">("list");
   const [areas, setAreas] = useState<Area[]>([]);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [filters, setFilters] = useState<ListingFilters>(() =>
@@ -416,6 +417,7 @@ export default function ListingsPage({
   ]);
 
   useEffect(() => {
+    if (resultsView !== "map") { setIsLoadingMapLocations(false); return; }
     const unresolvedListings = filteredListings.filter(
       (listing) =>
         listing.has_map_location === true &&
@@ -506,7 +508,7 @@ export default function ListingsPage({
         }
       }
     };
-  }, [filteredListings, listingMapLocations]);
+  }, [filteredListings, listingMapLocations, resultsView]);
 
   const hasActiveFilters =
     Object.values({
@@ -592,7 +594,7 @@ export default function ListingsPage({
   }
 
   return (
-    <main
+    <main className="marketplace"
       style={{
         minHeight: "100vh",
         background: "#f7f8fa",
@@ -602,7 +604,7 @@ export default function ListingsPage({
       }}
     >
       <section style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <header
+        <header className="marketplace-header"
           style={{
             alignItems: "flex-start",
             display: "flex",
@@ -625,10 +627,11 @@ export default function ListingsPage({
               Room rentals
             </p>
             <h1 style={{ fontSize: 36, margin: "0 0 8px" }}>
-              Find a room to call home
+              Find your place.
+              Feel at home.
             </h1>
             <p style={{ color: "#596579", margin: 0 }}>
-              Browse rooms available now or soon.
+              A room for your budget. A neighbourhood for your lifestyle. Your next chapter starts here.
             </p>
           </div>
           <nav
@@ -744,6 +747,7 @@ export default function ListingsPage({
           </nav>
         </header>
 
+        <div className="marketplace-intro"><span>MADE FOR YOUR NEXT MOVE</span><a href="#room-results">Explore available rooms <span aria-hidden="true">&#8599;</span></a><p>Looking for tenants? <AppLink href="/register" onNavigate={onNavigate}>List your room</AppLink></p></div>
         {sessionRestoreError !== null && (
           <p
             role="alert"
@@ -766,9 +770,12 @@ export default function ListingsPage({
         )}
 
         {isLoading && (
-          <p role="status" style={{ color: "#596579" }}>
-            Loading available rooms…
-          </p>
+          <div className="results-loading" aria-busy="true">
+            <p role="status">Finding your next space...</p>
+            <div className="room-grid loading-grid" aria-hidden="true">
+              {[0, 1, 2].map(item => <div className="room-skeleton" key={item}><div /><span /><span /></div>)}
+            </div>
+          </div>
         )}
 
         {!isLoading && error && (
@@ -936,9 +943,8 @@ export default function ListingsPage({
 
         {!isLoading && !error && filteredListings.length > 0 && (
           <>
-            <p aria-live="polite" style={{ color: "#596579" }}>
-              Showing {filteredListings.length} of {listings.length} rooms
-            </p>
+            <div className="results-toolbar" id="room-results"><div><p className="eyebrow">YOUR NEXT HOME</p><h2>Explore available rooms</h2><p aria-live="polite">{filteredListings.length} of {listings.length} rooms &middot; Prices in ZAR per month</p></div><div className="view-switch" aria-label="Results view"><button type="button" aria-pressed={resultsView === "list"} onClick={() => setResultsView("list")}>List</button><button type="button" aria-pressed={resultsView === "map"} onClick={() => setResultsView("map")}>Map</button></div></div>
+            {resultsView === "map" && <div className="results-map-panel">
             <ListingResultsMap
               listings={mapListings}
               onNavigate={onNavigate}
@@ -954,12 +960,14 @@ export default function ListingsPage({
                 within radius-filtered results.
               </p>
             )}
+            </div>}
             <ListingGrid
               listings={filteredListings}
               onNavigate={onNavigate}
             />
           </>
         )}
+      <footer className="marketplace-footer"><span className="modern-brand"><span>R</span> Room Rentals</span><p>Find a place for your next chapter.</p><AppLink href="/register" onNavigate={onNavigate}>Have a room to rent? Get started &rarr;</AppLink></footer>
       </section>
     </main>
   );
