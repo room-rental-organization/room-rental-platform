@@ -32,6 +32,7 @@ export default function RoomMap({
 }: RoomMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const markerLibraryRef = useRef<google.maps.MarkerLibrary | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(
     null,
   );
@@ -63,40 +64,12 @@ export default function RoomMap({
           fullscreenControl: false,
         });
         mapRef.current = map;
-        const pin = document.createElement("span");
-        pin.setAttribute("aria-hidden", "true");
-        pin.textContent = "📍";
-        pin.style.fontSize = "32px";
-        pin.style.lineHeight = "1";
-        const mapMarker = new marker.AdvancedMarkerElement({
-          map,
-          title: label,
-          gmpDraggable: draggable,
-          content: pin,
-        });
-        markerRef.current = mapMarker;
+        markerLibraryRef.current = marker;
+        setMapError(null);
         setMapReady(true);
-        if (draggable) {
-          mapMarker.addListener("dragend", () => {
-            const position = mapMarker.position;
-            if (position === null || position === undefined) {
-              return;
-            }
-
-            onPointChangeRef.current?.({
-              latitude:
-                typeof position.lat === "function"
-                  ? position.lat()
-                  : position.lat,
-              longitude:
-                typeof position.lng === "function"
-                  ? position.lng()
-                  : position.lng,
-            });
-          });
-        }
       } catch (error: unknown) {
         if (active) {
+          console.error("Room map initialization failed", error);
           setMapError(
             error instanceof Error
               ? error.message
@@ -114,6 +87,7 @@ export default function RoomMap({
         markerRef.current.map = null;
         markerRef.current = null;
       }
+      markerLibraryRef.current = null;
       mapRef.current = null;
     };
   }, [draggable, label]);
@@ -123,8 +97,8 @@ export default function RoomMap({
 
     async function updateMapLocation(): Promise<void> {
       const map = mapRef.current;
-      const marker = markerRef.current;
-      if (!mapReady || map === null || marker === null) {
+      const markerLibrary = markerLibraryRef.current;
+      if (!mapReady || map === null || markerLibrary === null) {
         return;
       }
 
@@ -157,7 +131,9 @@ export default function RoomMap({
         return;
       }
       if (location === null) {
-        marker.position = null;
+        if (markerRef.current !== null) {
+          markerRef.current.map = null;
+        }
         map.setCenter(SOUTH_AFRICA_CENTER);
         map.setZoom(5);
         return;
@@ -167,18 +143,63 @@ export default function RoomMap({
         lat: location.latitude,
         lng: location.longitude,
       };
-      marker.position = position;
-      marker.title = label;
-      map.setCenter(position);
-      map.setZoom(Math.max(map.getZoom() ?? 5, 13));
-      setMapError(null);
+      try {
+        // Attach a pin only once its position is known, as on the results map.
+        if (markerRef.current === null) {
+          const pin = document.createElement("span");
+          pin.setAttribute("aria-hidden", "true");
+          pin.textContent = "📍";
+          pin.style.fontSize = "32px";
+          pin.style.lineHeight = "1";
+          const mapMarker = new markerLibrary.AdvancedMarkerElement({
+            map,
+            position,
+            title: label,
+            gmpDraggable: draggable,
+            content: pin,
+          });
+          markerRef.current = mapMarker;
+          if (draggable) {
+            mapMarker.addListener("dragend", () => {
+              const position = mapMarker.position;
+              if (position === null || position === undefined) {
+                return;
+              }
+              onPointChangeRef.current?.({
+                latitude:
+                  typeof position.lat === "function"
+                    ? position.lat()
+                    : position.lat,
+                longitude:
+                  typeof position.lng === "function"
+                    ? position.lng()
+                    : position.lng,
+              });
+            });
+          }
+        } else {
+          markerRef.current.position = position;
+          markerRef.current.title = label;
+          markerRef.current.map = map;
+        }
+        map.setCenter(position);
+        map.setZoom(Math.max(map.getZoom() ?? 5, 13));
+        setMapError(null);
+      } catch (error: unknown) {
+        console.error("Room map location update failed", error);
+        setMapError(
+          error instanceof Error
+            ? error.message
+            : "The room pin could not be displayed.",
+        );
+      }
     }
 
     void updateMapLocation();
     return () => {
       active = false;
     };
-  }, [label, mapReady, placeId, point?.latitude, point?.longitude]);
+  }, [draggable, label, mapReady, placeId, point?.latitude, point?.longitude]);
 
   return (
     <section aria-label={label} className="room-map">
