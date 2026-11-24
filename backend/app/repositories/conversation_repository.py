@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.conversation import (
@@ -6,6 +6,8 @@ from app.models.conversation import (
     ConversationParticipant,
     Message,
 )
+from app.models.contact_request import ContactRequest
+from app.models.listing import Listing
 
 
 class ConversationRepository:
@@ -45,6 +47,21 @@ class ConversationRepository:
             )
         )
         return list(self._db.scalars(statement).all())
+
+    def count_open_for_landlord(self, landlord_id: int) -> int:
+        statement = (
+            select(func.count(Conversation.conversation_id))
+            .join(
+                ContactRequest,
+                ContactRequest.request_id == Conversation.contact_request_id,
+            )
+            .join(Listing, Listing.listing_id == ContactRequest.listing_id)
+            .where(
+                Listing.landlord_id == landlord_id,
+                ContactRequest.status.in_(("pending", "approved")),
+            )
+        )
+        return int(self._db.scalar(statement) or 0)
 
     def get_for_participant(
         self,

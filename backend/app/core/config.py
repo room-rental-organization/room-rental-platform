@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, gt=0)
     rental_interest_expiry_days: int = Field(default=90, gt=0)
     rental_interest_max_submissions_per_day: int = Field(default=20, gt=0)
+    trust_verification_max_submissions_per_day: int = Field(default=5, gt=0)
+    report_max_submissions_per_day: int = Field(default=10, gt=0)
     cors_allowed_origins: str = (
         "http://127.0.0.1:5173,http://localhost:5173,"
         "http://127.0.0.1:5174,http://localhost:5174"

@@ -430,6 +430,49 @@ class WhatsAppServiceTests(unittest.TestCase):
             db.close()
             engine.dispose()
 
+    def test_account_phone_verification_is_recorded_after_code_confirmation(self) -> None:
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        db = Session(engine, expire_on_commit=False)
+        db.add(
+            User(
+                user_id=15,
+                full_name="Verified User",
+                phone_no="082 123 4567",
+                email="verified@example.com",
+                phone_verified_at=datetime(2026, 11, 1, 9),
+            ),
+        )
+        db.commit()
+        provider = Mock()
+        service = WhatsAppService(db, provider=provider)
+
+        try:
+            with (
+                patch(
+                    "app.services.whatsapp_service.get_settings",
+                    return_value=make_settings(),
+                ),
+                patch(
+                    "app.core.whatsapp_privacy.get_settings",
+                    return_value=make_settings(),
+                ),
+            ):
+                service.start_verification(15, "082 123 4567")
+                self.assertEqual(
+                    provider.send_template.call_args.args[0],
+                    "+27821234567",
+                )
+                self.assertIsNone(db.get(User, 15).phone_verified_at)
+                code = provider.send_template.call_args.args[2]
+                service.confirm_verification(15, code)
+
+            user = db.get(User, 15)
+            self.assertIsNotNone(user.phone_verified_at)
+        finally:
+            db.close()
+            engine.dispose()
+
 
 if __name__ == "__main__":
     unittest.main()

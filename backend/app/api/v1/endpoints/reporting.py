@@ -5,17 +5,20 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import require_role
+from app.api.dependencies import require_any_role, require_role
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.report import (
     ReportCreateRequest,
     ReportHistoryResponse,
+    ReportNoteRequest,
     ReportResolutionRequest,
     ReportResponse,
 )
 from app.services.report_service import (
+    ReportDuplicateError,
     ReportNotFoundError,
+    ReportRateLimitError,
     ReportService,
     ReportStateError,
     ReportTargetError,
@@ -26,7 +29,7 @@ from app.services.report_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["reporting"])
-tenant_dependency = require_role("tenant")
+tenant_dependency = require_any_role("tenant", "landlord")
 admin_dependency = require_role("admin")
 
 
@@ -46,6 +49,16 @@ def _raise_report_http_error(
     if isinstance(error, ReportStateError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    if isinstance(error, ReportDuplicateError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(error),
+        ) from error
+    if isinstance(error, ReportRateLimitError):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(error),
         ) from error
     if isinstance(error, ReportTargetError):
@@ -75,6 +88,9 @@ def submit_report(
     except (
         ReportTargetError,
         ReportTargetNotFoundError,
+        ReportStateError,
+        ReportDuplicateError,
+        ReportRateLimitError,
         SQLAlchemyError,
     ) as exc:
         _raise_report_http_error(exc)
@@ -174,6 +190,26 @@ def dismiss_report(
 ) -> ReportResponse:
     try:
         return service.dismiss_report(
+            report_id,
+            current_admin.user_id,
+            request.note,
+        )
+    except (ReportNotFoundError, ReportStateError, SQLAlchemyError) as exc:
+        _raise_report_http_error(exc, report_id)
+
+
+@router.post(
+    "/admin/reports/{report_id}/notes",
+    response_model=ReportResponse,
+)
+def add_report_note(
+    report_id: Annotated[int, Path(gt=0)],
+    request: ReportNoteRequest,
+    current_admin: User = Depends(admin_dependency),
+    service: ReportService = Depends(get_report_service),
+) -> ReportResponse:
+    try:
+        return service.add_internal_note(
             report_id,
             current_admin.user_id,
             request.note,

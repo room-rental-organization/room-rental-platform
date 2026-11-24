@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import BinaryIO
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,6 +11,7 @@ from app.repositories.amenity_repository import AmenityRepository
 from app.repositories.area_repository import AreaRepository
 from app.repositories.listing_repository import ListingRepository
 from app.schemas.landlord_listing import (
+    AvailabilityStatus,
     ListingCreateRequest,
     ListingUpdateRequest,
 )
@@ -77,6 +79,7 @@ class LandlordListingService:
         listing = Listing(
             landlord_id=landlord_id,
             status=self.DRAFT_STATUS,
+            availability_status="available",
             **changes.model_dump(exclude={"amenities"}),
             amenities=amenities,
         )
@@ -145,6 +148,23 @@ class LandlordListingService:
         if listing.status != self.CLOSED_STATUS:
             listing.status = self.CLOSED_STATUS
             self._commit()
+        return LandlordListingResponse.model_validate(listing)
+
+    def update_availability(
+        self,
+        landlord_id: int,
+        listing_id: int,
+        availability_status: AvailabilityStatus,
+    ) -> LandlordListingResponse:
+        listing = self._get_owned(landlord_id, listing_id)
+        if listing.status != self.ACTIVE_STATUS:
+            raise ListingStateError(
+                "Only approved active listings can change availability.",
+            )
+
+        listing.availability_status = availability_status
+        listing.updated_at = datetime.now()
+        self._commit()
         return LandlordListingResponse.model_validate(listing)
 
     def upload_photo(

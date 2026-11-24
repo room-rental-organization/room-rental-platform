@@ -22,6 +22,12 @@ class ListingModelTests(unittest.TestCase):
             "listings_google_place_coordinates_check",
             constraint_names,
         )
+        self.assertIn(
+            "listings_availability_status_check",
+            constraint_names,
+        )
+        self.assertFalse(Listing.__table__.c.availability_status.nullable)
+        self.assertFalse(Listing.__table__.c.updated_at.nullable)
 
     def test_room_type_uses_existing_postgresql_enum(self) -> None:
         room_type = Listing.__table__.c.room_type.type

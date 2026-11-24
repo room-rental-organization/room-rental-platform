@@ -18,6 +18,7 @@ class ListingServiceTests(unittest.TestCase):
         listing_id: int,
         *,
         status: str = "active",
+        availability_status: str = "available",
         date_available: date = date(2026, 10, 28),
     ) -> SimpleNamespace:
         return SimpleNamespace(
@@ -34,6 +35,7 @@ class ListingServiceTests(unittest.TestCase):
             google_place_id=None,
             date_available=date_available,
             status=status,
+            availability_status=availability_status,
             created_at=datetime(2026, 10, 1),
             photos=[],
         )
@@ -76,6 +78,26 @@ class ListingServiceTests(unittest.TestCase):
         result = self.service.list_public_listings()
 
         self.assertEqual(result, [])
+
+    def test_list_hides_reserved_and_occupied_listings(self) -> None:
+        available = self.make_listing(1)
+        reserved = self.make_listing(2, availability_status="reserved")
+        occupied = self.make_listing(3, availability_status="occupied")
+        self.repository.list_all.return_value = [
+            available,
+            reserved,
+            occupied,
+        ]
+        self.repository.get_latest_moderation_decisions.return_value = {
+            1: "approved",
+        }
+
+        result = self.service.list_public_listings()
+
+        self.assertEqual([listing.listing_id for listing in result], [1])
+        self.repository.get_latest_moderation_decisions.assert_called_once_with(
+            [1],
+        )
 
     def test_radius_search_uses_stored_coordinates_without_exposing_them(
         self,

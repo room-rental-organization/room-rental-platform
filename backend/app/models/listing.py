@@ -45,6 +45,10 @@ class Listing(Base):
             "(latitude IS NULL AND longitude IS NULL)",
             name="listings_google_place_coordinates_check",
         ),
+        CheckConstraint(
+            "availability_status IN ('available', 'reserved', 'occupied')",
+            name="listings_availability_status_check",
+        ),
     )
 
     listing_id: Mapped[int] = mapped_column(
@@ -92,6 +96,12 @@ class Listing(Base):
         nullable=True,
     )
     date_available: Mapped[date] = mapped_column(Date, nullable=False)
+    availability_status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="available",
+        server_default="available",
+    )
     status: Mapped[str] = mapped_column(
         ENUM(
             "pending",
@@ -110,6 +120,12 @@ class Listing(Base):
         DateTime,
         nullable=False,
         server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
     photos: Mapped[list[ListingPhoto]] = relationship(
         back_populates="listing",

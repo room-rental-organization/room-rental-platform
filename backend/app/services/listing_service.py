@@ -149,7 +149,10 @@ class ListingService:
 
     @classmethod
     def _is_published(cls, listing: Listing) -> bool:
-        return listing.status == cls.PUBLISHED_STATUS
+        return (
+            listing.status == cls.PUBLISHED_STATUS
+            and listing.availability_status == "available"
+        )
 
     @staticmethod
     def _to_public_response(

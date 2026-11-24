@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from app.api.dependencies import get_current_user
 from app.api.v1.endpoints.landlord_listings import (
+    get_landlord_dashboard_service,
     get_landlord_listing_service,
     landlord_dependency,
 )
@@ -15,7 +16,10 @@ from app.api.v1.router import api_router
 from app.db.session import get_db
 from app.models.role import Role
 from app.models.user import User
-from app.schemas.listing import ListingResponse
+from app.schemas.landlord_dashboard import (
+    LandlordBusinessDashboardResponse,
+)
+from app.schemas.listing import LandlordListingResponse
 
 
 class LandlordListingEndpointTests(unittest.TestCase):
@@ -23,9 +27,13 @@ class LandlordListingEndpointTests(unittest.TestCase):
         self.app = FastAPI()
         self.app.include_router(api_router)
         self.service = Mock()
+        self.dashboard_service = Mock()
         self.landlord = User(user_id=8)
         self.app.dependency_overrides[get_landlord_listing_service] = (
             lambda: self.service
+        )
+        self.app.dependency_overrides[get_landlord_dashboard_service] = (
+            lambda: self.dashboard_service
         )
         self.app.dependency_overrides[landlord_dependency] = (
             lambda: self.landlord
@@ -39,8 +47,8 @@ class LandlordListingEndpointTests(unittest.TestCase):
     def make_listing(
         listing_id: int = 12,
         status: str = "draft",
-    ) -> ListingResponse:
-        return ListingResponse(
+    ) -> LandlordListingResponse:
+        return LandlordListingResponse(
             listing_id=listing_id,
             area_id=3,
             title="A room",
@@ -52,6 +60,8 @@ class LandlordListingEndpointTests(unittest.TestCase):
             date_available=date(2026, 11, 1),
             status=status,
             created_at=datetime(2026, 10, 1),
+            updated_at=datetime(2026, 10, 2),
+            availability_status="available",
             photos=[],
         )
 
@@ -65,6 +75,27 @@ class LandlordListingEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]["listing_id"], 12)
         self.service.list_for_landlord.assert_called_once_with(8)
+
+    def test_dashboard_uses_authenticated_landlord_id(self) -> None:
+        self.dashboard_service.get_summary.return_value = (
+            LandlordBusinessDashboardResponse(
+                total_listings=2,
+                available_rooms=1,
+                occupied_rooms=1,
+                reserved_rooms=0,
+                total_enquiries=3,
+                new_enquiries=1,
+                active_conversations=2,
+                listing_performance=[],
+                monthly_enquiries=[],
+            )
+        )
+
+        response = self.client.get("/api/v1/users/me/business-dashboard")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_listings"], 2)
+        self.dashboard_service.get_summary.assert_called_once_with(8)
 
     def test_create_listing_uses_authenticated_landlord_id(self) -> None:
         self.service.create_listing.return_value = self.make_listing()
@@ -142,6 +173,33 @@ class LandlordListingEndpointTests(unittest.TestCase):
         self.assertEqual(response.json()["status"], "closed")
         self.service.withdraw_listing.assert_called_once_with(8, 12)
 
+    def test_availability_update_uses_authenticated_owner(self) -> None:
+        self.service.update_availability.return_value = self.make_listing(
+            status="active",
+        ).model_copy(update={"availability_status": "occupied"})
+
+        response = self.client.patch(
+            "/api/v1/listings/12/availability",
+            json={"availability_status": "occupied"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["availability_status"], "occupied")
+        self.service.update_availability.assert_called_once_with(
+            8,
+            12,
+            "occupied",
+        )
+
+    def test_availability_update_rejects_invalid_state(self) -> None:
+        response = self.client.patch(
+            "/api/v1/listings/12/availability",
+            json={"availability_status": "pending"},
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.service.update_availability.assert_not_called()
+
     def test_upload_photo_passes_image_to_service(self) -> None:
         self.service.upload_photo.return_value = self.make_listing()
 
@@ -171,6 +229,15 @@ class LandlordListingEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.service.list_for_landlord.assert_not_called()
 
+    def test_business_dashboard_rejects_missing_authentication(self) -> None:
+        self.app.dependency_overrides.pop(landlord_dependency)
+        self.app.dependency_overrides[get_db] = lambda: Mock()
+
+        response = self.client.get("/api/v1/users/me/business-dashboard")
+
+        self.assertEqual(response.status_code, 401)
+        self.dashboard_service.get_summary.assert_not_called()
+
     def test_tenant_cannot_use_landlord_listing_routes(self) -> None:
         self.app.dependency_overrides.pop(landlord_dependency)
         self.app.dependency_overrides[get_current_user] = lambda: User(
@@ -190,6 +257,29 @@ class LandlordListingEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.service.list_for_landlord.assert_not_called()
+
+    def test_tenant_cannot_update_listing_availability(self) -> None:
+        self.app.dependency_overrides.pop(landlord_dependency)
+        self.app.dependency_overrides[get_current_user] = lambda: User(
+            user_id=9,
+        )
+        self.app.dependency_overrides[get_db] = lambda: Mock()
+        role_repository = Mock()
+        role_repository.list_for_user.return_value = [
+            Role(role_id=1, name="tenant"),
+        ]
+
+        with patch(
+            "app.api.dependencies.RoleRepository",
+            return_value=role_repository,
+        ):
+            response = self.client.patch(
+                "/api/v1/listings/12/availability",
+                json={"availability_status": "occupied"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.service.update_availability.assert_not_called()
 
 
 if __name__ == "__main__":

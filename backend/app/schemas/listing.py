@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import AliasPath, BaseModel, ConfigDict, Field
 
@@ -38,6 +39,8 @@ class ListingResponse(BaseModel):
 
 
 class LandlordListingResponse(ListingResponse):
+    availability_status: Literal["available", "reserved", "occupied"]
+    updated_at: datetime
     google_place_id: str | None = Field(
         default=None,
         max_length=512,

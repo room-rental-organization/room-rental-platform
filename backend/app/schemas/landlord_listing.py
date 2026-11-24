@@ -31,6 +31,7 @@ RoomType = Literal[
     "bachelor_flat",
     "self_contained",
 ]
+AvailabilityStatus = Literal["available", "reserved", "occupied"]
 MonthlyRent = Annotated[
     Decimal,
     Field(gt=0, max_digits=10, decimal_places=2),
@@ -134,3 +135,9 @@ class ListingUpdateRequest(BaseModel):
         ):
             raise ValueError("Listing fields cannot be null.")
         return self
+
+
+class ListingAvailabilityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    availability_status: AvailabilityStatus

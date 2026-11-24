@@ -9,6 +9,7 @@ from app.api.v1.endpoints.contact_requests import router as contact_requests_rou
 from app.api.v1.endpoints.conversations import router as conversations_router
 from app.api.v1.endpoints.listings import router as listings_router
 from app.api.v1.endpoints.landlord_listings import router as landlord_listings_router
+from app.api.v1.endpoints.leads import router as leads_router
 from app.api.v1.endpoints.reporting import router as reporting_router
 from app.api.v1.endpoints.rental_interests import router as rental_interests_router
 from app.api.v1.endpoints.rental_interest_notifications import (
@@ -19,6 +20,7 @@ from app.api.v1.endpoints.saved_searches import router as saved_searches_router
 from app.api.v1.endpoints.saved_listings import router as saved_listings_router
 from app.api.v1.endpoints.users import router as users_router
 from app.api.v1.endpoints.whatsapp import router as whatsapp_router
+from app.api.v1.endpoints.trust_verification import router as trust_verification_router
 
 
 api_router = APIRouter(prefix="/api/v1")
@@ -31,6 +33,7 @@ api_router.include_router(contact_requests_router)
 api_router.include_router(conversations_router)
 api_router.include_router(listings_router)
 api_router.include_router(landlord_listings_router)
+api_router.include_router(leads_router)
 api_router.include_router(reporting_router)
 api_router.include_router(rental_interests_router)
 api_router.include_router(rental_interest_notifications_router)
@@ -39,3 +42,4 @@ api_router.include_router(saved_searches_router)
 api_router.include_router(saved_listings_router)
 api_router.include_router(users_router)
 api_router.include_router(whatsapp_router)
+api_router.include_router(trust_verification_router)

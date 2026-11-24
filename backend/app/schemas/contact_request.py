@@ -15,3 +15,10 @@ class ContactRequestResponse(BaseModel):
     listing_id: int
     status: str
     requested_at: datetime
+
+
+class LandlordContactRequestResponse(ContactRequestResponse):
+    listing_title: str
+    listing_address: str
+    tenant_name: str
+    conversation_id: int | None
