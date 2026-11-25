@@ -22,7 +22,6 @@ from app.schemas.trust_verification import (
     VerificationResubmissionRequest,
     VerificationSubmissionRequest,
 )
-from app.services.listing_service import ListingService
 
 
 class TrustVerificationError(Exception):
@@ -61,7 +60,6 @@ class TrustVerificationService:
         self._db = db
         self._requests = TrustVerificationRepository(db)
         self._listings = ListingRepository(db)
-        self._public_listings = ListingService(self._listings)
         self._max_submissions_per_day = (
             get_settings().trust_verification_max_submissions_per_day
         )
@@ -234,14 +232,12 @@ class TrustVerificationService:
         self._commit()
         return AdminVerificationRequestResponse.model_validate(request)
 
-    def public_trust_for_listing(
+    def trust_for_owned_listing(
         self,
         listing_id: int,
+        landlord_id: int,
     ) -> PublicLandlordTrustResponse | None:
-        public_listing = self._public_listings.get_public_listing(listing_id)
-        if public_listing is None:
-            return None
-        listing = self._requests.get_listing(listing_id)
+        listing = self._listings.get_owned(listing_id, landlord_id)
         if listing is None:
             return None
         landlord = self._db.get(User, listing.landlord_id)

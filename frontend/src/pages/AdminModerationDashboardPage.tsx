@@ -14,9 +14,11 @@ import type {
   ListingModerationRecord,
 } from "../types/listing";
 import "./AdminModerationDashboardPage.css";
+import { WorkspaceSidebar } from "../components/WorkspaceChrome";
 
 type AdminModerationDashboardPageProps = {
   accessToken: string;
+  onNavigate: (path: string) => void;
   profile: UserProfile;
   onOpenReports: () => void;
   onSignOut: () => void;
@@ -41,6 +43,7 @@ function formatDate(value: string): string {
 
 export default function AdminModerationDashboardPage({
   accessToken,
+  onNavigate,
   profile,
   onOpenReports,
   onSignOut,
@@ -365,42 +368,7 @@ export default function AdminModerationDashboardPage({
         {errorMessage && <p className="message message-error" role="alert">{errorMessage}</p>}
         {selectedListing && <ul className="review-dialog-content">{renderListing(selectedListing, selectedListing.status === "active", true)}</ul>}
       </dialog>
-      <aside className="admin-sidebar" aria-label="Admin navigation">
-        <a className="admin-brand" href="/" aria-label="Room Rentals home">
-          <span aria-hidden="true">R</span>
-          <strong>Room Rentals</strong>
-        </a>
-        <p className="admin-nav-label">WORKSPACE</p>
-        <nav className="admin-sidebar-nav">
-          <button className="admin-nav-item active" type="button">
-            <span aria-hidden="true">▦</span>
-            Listings
-          </button>
-          <button
-            className="admin-nav-item"
-            onClick={onOpenReports}
-            type="button"
-          >
-            <span aria-hidden="true">⚑</span>
-            Reports
-          </button>
-          <a className="admin-nav-item" href="/">
-            <span aria-hidden="true">↗</span>
-            Browse rooms
-          </a>
-        </nav>
-        <div className="admin-sidebar-account">
-          <span className="admin-avatar" aria-hidden="true">
-            {profile.full_name
-              .split(/\s+/)
-              .slice(0, 2)
-              .map((part) => part[0] ?? "")
-              .join("")
-              .toUpperCase()}
-          </span>
-          <span className="admin-account-name">{profile.full_name}</span>
-        </div>
-      </aside>
+      <WorkspaceSidebar role="admin" currentPath="/admin" profile={profile} onNavigate={onNavigate} onSignOut={onSignOut} />
 
       <div className="admin-dashboard-main">
         <header className="admin-topbar">
@@ -427,13 +395,7 @@ export default function AdminModerationDashboardPage({
             >
               Open reports
             </button>
-            <button
-              className="admin-topbar-signout"
-              onClick={onSignOut}
-              type="button"
-            >
-              Sign out
-            </button>
+
           </div>
         </header>
 

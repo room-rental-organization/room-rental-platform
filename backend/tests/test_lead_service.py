@@ -77,6 +77,15 @@ class LeadServiceTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
+    def test_landlord_and_admin_enquiries_include_the_same_room_and_names(self) -> None:
+        for result in (self.service.list_for_landlord(8)[0], self.service.list_for_admin()[0]):
+            with self.subTest(role=result.landlord_id):
+                self.assertEqual(result.listing_title, "Room")
+                self.assertEqual(result.tenant_name, "User 7")
+                self.assertEqual(result.landlord_name, "User 8")
+                for private_field in ("phone_no", "password_hash", "email", "tenant", "landlord", "listing"):
+                    self.assertNotIn(private_field, result.model_dump())
+
     def test_repeated_ensure_returns_one_lead_and_one_initial_history_entry(
         self,
     ) -> None:

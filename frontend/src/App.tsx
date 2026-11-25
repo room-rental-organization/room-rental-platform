@@ -10,6 +10,7 @@ import {
   type UserProfile,
 } from "./api";
 import AppLink from "./components/AppLink";
+import { WorkspaceShell } from "./components/WorkspaceChrome";
 import AssistantWidget from "./components/AssistantWidget";
 import DashboardPage, { type DashboardRole } from "./pages/DashboardPage";
 import AdminReportsPage from "./pages/AdminReportsPage";
@@ -20,6 +21,7 @@ import ListingDetailsPage from "./pages/ListingDetailsPage";
 import ListingsPage from "./pages/ListingsPage";
 import TenantReportsPage from "./pages/TenantReportsPage";
 import "./App.css";
+import RentalWorkspacePage from "./features/rentals/WorkspacePage";
 
 type AuthMode = "login" | "register";
 type RegistrationRole = "tenant" | "landlord";
@@ -64,6 +66,7 @@ function getListingReturnPath(): string | null {
 
 function App() {
   const [pathname, setPathname] = useState(window.location.pathname);
+  const [search, setSearch] = useState(window.location.search);
   const [mode, setMode] = useState<AuthMode>(
     window.location.pathname === "/register" ? "register" : "login",
   );
@@ -155,6 +158,7 @@ function App() {
   useEffect(() => {
     function syncPathname() {
       setPathname(window.location.pathname);
+      setSearch(window.location.search);
       setMode(window.location.pathname === "/register" ? "register" : "login");
     }
 
@@ -170,6 +174,7 @@ function App() {
     }
     window.history.pushState(null, "", destination.href);
     setPathname(destination.pathname);
+    setSearch(destination.search);
     setMode(destination.pathname === "/register" ? "register" : "login");
     window.scrollTo({ top: 0 });
   }
@@ -328,25 +333,40 @@ function App() {
   }
 
   const tenantReportMatch = pathname.match(
-    /^\/tenant\/reports(?:\/(\d+))?\/?$/,
+    /^\/(tenant|landlord)\/reports(?:\/(\d+))?\/?$/,
   );
+  const rentalWorkspaceMatch = pathname.match(/^\/(landlord|tenant|admin)\/(leads|verification|disputes)\/?$/);
+  if (rentalWorkspaceMatch !== null && isAuthReady && profile !== null && accessToken !== null) {
+    const role = rentalWorkspaceMatch[1] as "landlord" | "tenant" | "admin";
+    const view = rentalWorkspaceMatch[2];
+    const allowed = profile.roles.includes(role) &&
+      (view === "leads" || (view === "verification" && role !== "tenant") || (view === "disputes" && role === "admin"));
+    if (!allowed) {
+      const accountRole = getDashboardRole(profile.roles);
+      return <WorkspaceShell role={accountRole} currentPath={pathname} title="Access unavailable" profile={profile} onNavigate={navigate} onSignOut={handleSignOut}><p>This workspace is not available for your account.</p><AppLink href={`/${accountRole}`} onNavigate={navigate}>Return to your dashboard</AppLink></WorkspaceShell>;
+    }
+    return renderWithAssistant(<RentalWorkspacePage key={`${role}-${view}-${profile.user_id}`} role={role} profile={profile} path={`/${role}/${view}`} token={accessToken} onNavigate={navigate} onSignOut={handleSignOut} />);
+  }
   if (
     tenantReportMatch !== null &&
     profile !== null &&
     accessToken !== null &&
-    profile.roles.includes("tenant")
+    profile.roles.includes(tenantReportMatch[1])
   ) {
     return renderWithAssistant(
+      <WorkspaceShell role={tenantReportMatch[1] as "landlord" | "tenant"} currentPath={`/${tenantReportMatch[1]}/reports`} title="Reports" profile={profile} onNavigate={navigate} onSignOut={handleSignOut}>
       <TenantReportsPage
+        role={tenantReportMatch[1] as "landlord" | "tenant"}
         accessToken={accessToken}
         initialListingId={
-          tenantReportMatch[1] === undefined
+          tenantReportMatch[2] === undefined
             ? undefined
-            : Number(tenantReportMatch[1])
+            : Number(tenantReportMatch[2])
         }
-        onBackToDashboard={() => navigate("/tenant")}
+        onBackToDashboard={() => navigate(`/${tenantReportMatch[1]}`)}
         profile={profile}
-      />,
+      />
+      </WorkspaceShell>,
     );
   }
 
@@ -357,12 +377,13 @@ function App() {
     profile.roles.includes("admin")
   ) {
     return (
+      <WorkspaceShell role="admin" currentPath="/admin/reports" title="Reports" profile={profile} onNavigate={navigate} onSignOut={handleSignOut}>
       <AdminReportsPage
         accessToken={accessToken}
         onBackToDashboard={() => navigate("/admin")}
-        onSignOut={handleSignOut}
         profile={profile}
       />
+      </WorkspaceShell>
     );
   }
 
@@ -373,12 +394,13 @@ function App() {
     (profile.roles.includes("tenant") || profile.roles.includes("landlord"))
   ) {
     return renderWithAssistant(
+      <WorkspaceShell role={profile.roles.includes("landlord") ? "landlord" : "tenant"} currentPath="/conversations" title="Messages" profile={profile} onNavigate={navigate} onSignOut={handleSignOut}>
       <ConversationsPage
         accessToken={accessToken}
         onNavigate={navigate}
-        onSignOut={handleSignOut}
         profile={profile}
-      />,
+      />
+      </WorkspaceShell>,
     );
   }
 
@@ -417,6 +439,7 @@ function App() {
       if (dashboardRole === "landlord") {
         return renderWithAssistant(
           <LandlordDashboardPage
+            view={new URLSearchParams(search).get("view") ?? "overview"}
             accessToken={accessToken}
             onNavigate={navigate}
             onSignOut={handleSignOut}
@@ -429,6 +452,7 @@ function App() {
         return (
           <AdminModerationDashboardPage
             accessToken={accessToken}
+            onNavigate={navigate}
             onOpenReports={() => navigate("/admin/reports")}
             onSignOut={handleSignOut}
             profile={profile}
@@ -438,6 +462,7 @@ function App() {
 
       return renderWithAssistant(
         <DashboardPage
+          view={new URLSearchParams(search).get("view") ?? "overview"}
           accessToken={accessToken}
           onNavigate={navigate}
           onOpenReports={() => navigate("/tenant/reports")}
@@ -447,6 +472,11 @@ function App() {
         />,
       );
     }
+  }
+
+  if (profile !== null && accessToken !== null && /^\/(tenant|landlord|admin)(?:\/|$)/.test(pathname)) {
+    const role = getDashboardRole(profile.roles);
+    return <WorkspaceShell role={role} currentPath={pathname} title="Access unavailable" profile={profile} onNavigate={navigate} onSignOut={handleSignOut}><p>This page is not available for your account.</p><AppLink href={`/${role}`} onNavigate={navigate}>Return to your dashboard</AppLink></WorkspaceShell>;
   }
 
   const isRegistering = mode === "register";

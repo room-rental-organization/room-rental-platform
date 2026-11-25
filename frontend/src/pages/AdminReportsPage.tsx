@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { rentalRequest } from "../features/rentals/api";
 
 import {
   assignReportToSelf,
@@ -16,7 +17,6 @@ type AdminReportsPageProps = {
   accessToken: string;
   profile: UserProfile;
   onBackToDashboard: () => void;
-  onSignOut: () => void;
 };
 
 const statusOptions: { value: ReportStatus | "all"; label: string }[] = [
@@ -57,6 +57,7 @@ function formatDate(value: string): string {
 }
 
 function getTargetLabel(report: ReportResponse): string {
+  if (report.lead_id != null) return `Lead enquiry #${report.lead_id}`;
   if (report.target_user_id !== null) {
     const accountLabel = `Account #${report.target_user_id}`;
     return report.listing_id === null
@@ -72,7 +73,6 @@ export default function AdminReportsPage({
   accessToken,
   profile,
   onBackToDashboard,
-  onSignOut,
 }: AdminReportsPageProps) {
   const [reports, setReports] = useState<ReportResponse[]>([]);
   const [statusFilter, setStatusFilter] = useState<ReportStatus | "all">(
@@ -238,7 +238,7 @@ export default function AdminReportsPage({
           </div>
           <div>
             <dt style={{ color: "#77868d", fontSize: 13 }}>Submitted by</dt>
-            <dd style={{ margin: "4px 0 0" }}>Tenant #{report.tenant_id}</dd>
+            <dd style={{ margin: "4px 0 0" }}>Account #{report.tenant_id}</dd>
           </div>
           <div>
             <dt style={{ color: "#77868d", fontSize: 13 }}>Assigned admin</dt>
@@ -270,7 +270,7 @@ export default function AdminReportsPage({
               gap: 7,
             }}
           >
-            Resolution or dismissal note (optional)
+            {report.lead_id != null ? "Dispute decision reason (required)" : "Resolution or dismissal note (optional)"}
             <textarea
               maxLength={2000}
               onChange={(event) =>
@@ -314,7 +314,7 @@ export default function AdminReportsPage({
             <>
               <button
                 className="primary-button"
-                disabled={isBusy}
+                disabled={isBusy || (report.lead_id != null && !note.trim())}
                 onClick={() =>
                   void runAction(
                     report.report_id,
@@ -332,7 +332,7 @@ export default function AdminReportsPage({
               </button>
               <button
                 className="secondary-button"
-                disabled={isBusy}
+                disabled={isBusy || (report.lead_id != null && !note.trim())}
                 onClick={() =>
                   void runAction(
                     report.report_id,
@@ -347,6 +347,7 @@ export default function AdminReportsPage({
               >
                 Dismiss
               </button>
+              <button className="secondary-button" type="button" disabled={isBusy || !note.trim()} onClick={() => void runAction(report.report_id, () => rentalRequest<ReportResponse>(`/admin/reports/${report.report_id}/notes`, accessToken, "POST", { note: note.trim() }), `Internal note added to report #${report.report_id}.`)}>Add internal note</button>
             </>
           )}
           <button
@@ -390,7 +391,7 @@ export default function AdminReportsPage({
   }
 
   return (
-    <main className="page-shell">
+    <section className="role-report-content">
       <section
         aria-labelledby="admin-reports-heading"
         style={{
@@ -415,18 +416,12 @@ export default function AdminReportsPage({
         >
           <div>
             <p className="eyebrow">Room Rentals · Administration</p>
-            <h1 id="admin-reports-heading">Report queue</h1>
+            <h2 id="admin-reports-heading">Report queue</h2>
             <p className="intro" style={{ marginBottom: 0 }}>
               Welcome, {profile.full_name}. Review, assign, and close reports.
             </p>
           </div>
-          <button
-            className="secondary-button"
-            onClick={onSignOut}
-            type="button"
-          >
-            Sign out
-          </button>
+
         </header>
 
         <div
@@ -495,6 +490,6 @@ export default function AdminReportsPage({
           {reports.map(renderReport)}
         </ol>
       </section>
-    </main>
+    </section>
   );
 }

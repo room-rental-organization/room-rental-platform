@@ -11,9 +11,10 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.listing import Listing
 
 
 class ContactRequest(Base):
@@ -58,3 +59,4 @@ class ContactRequest(Base):
         nullable=False,
         server_default=func.now(),
     )
+    listing: Mapped[Listing] = relationship(lazy="selectin")

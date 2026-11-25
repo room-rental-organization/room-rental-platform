@@ -35,7 +35,6 @@ class TrustVerificationServiceTests(unittest.TestCase):
         self.listings = Mock()
         self.service._requests = self.requests
         self.service._listings = self.listings
-        self.service._public_listings = Mock()
         self.requests.count_submissions_since.return_value = 0
         self.requests.latest_for_subject.return_value = None
 
@@ -196,7 +195,7 @@ class TrustVerificationServiceTests(unittest.TestCase):
         )
         self.db.commit.assert_called_once()
 
-    def test_public_summary_exposes_status_but_not_private_statement(self) -> None:
+    def test_owner_summary_exposes_status_but_not_private_statement(self) -> None:
         now = datetime.now(timezone.utc)
         landlord = User(
             user_id=7,
@@ -234,8 +233,7 @@ class TrustVerificationServiceTests(unittest.TestCase):
             evidence_statement="Private property statement.",
             expires_at=now + timedelta(days=10),
         )
-        self.service._public_listings.get_public_listing.return_value = Mock()
-        self.requests.get_listing.return_value = listing
+        self.listings.get_owned.return_value = listing
         self.db.get.return_value = landlord
         self.requests.latest_for_subject.side_effect = [
             identity,
@@ -243,13 +241,24 @@ class TrustVerificationServiceTests(unittest.TestCase):
         ]
         self.requests.count_active_listings.return_value = 2
 
-        result = self.service.public_trust_for_listing(24)
+        result = self.service.trust_for_owned_listing(24, 7)
 
         self.assertTrue(result.phone_verified)
         self.assertEqual(result.identity_status, "under_review")
         self.assertEqual(result.listing_verification_status, "verified")
         self.assertEqual(result.active_listing_count, 2)
         self.assertFalse(hasattr(result, "evidence_statement"))
+        self.listings.get_owned.assert_called_once_with(24, 7)
+
+    def test_trust_summary_rejects_a_listing_owned_by_someone_else(self) -> None:
+        self.listings.get_owned.return_value = None
+
+        result = self.service.trust_for_owned_listing(24, 99)
+
+        self.assertIsNone(result)
+        self.listings.get_owned.assert_called_once_with(24, 99)
+        self.db.get.assert_not_called()
+        self.requests.latest_for_subject.assert_not_called()
 
 
 if __name__ == "__main__":

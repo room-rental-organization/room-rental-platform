@@ -16,6 +16,7 @@ from app.api.dependencies import get_current_user
 from app.api.v1.router import api_router
 from app.db.session import get_db
 from app.models.contact_request import ContactRequest
+from app.models.listing import Listing
 from app.models.user import User
 from app.services.contact_request_service import (
     ContactRequestDuplicateError,
@@ -57,6 +58,7 @@ class ContactRequestEndpointTests(unittest.TestCase):
             tenant_id=6,
             status="pending",
             requested_at=datetime(2026, 10, 30, 8, 0),
+            listing=Listing(listing_id=14, title="Garden room"),
         )
 
     @staticmethod
@@ -78,6 +80,7 @@ class ContactRequestEndpointTests(unittest.TestCase):
                 "listing_id": 14,
                 "status": "pending",
                 "requested_at": "2026-10-30T08:00:00",
+                "listing_title": "Garden room",
             },
         )
         self.service.create_request.assert_called_once_with(6, 14)
@@ -96,6 +99,7 @@ class ContactRequestEndpointTests(unittest.TestCase):
                     "listing_id": 14,
                     "status": "pending",
                     "requested_at": "2026-10-30T08:00:00",
+                    "listing_title": "Garden room",
                 },
             ],
         )
@@ -207,11 +211,12 @@ class ContactRequestEndpointTests(unittest.TestCase):
 
         self.assertEqual(
             set(response.json()),
-            {"request_id", "listing_id", "status", "requested_at"},
+            {"request_id", "listing_id", "status", "requested_at", "listing_title"},
         )
         self.assertNotIn("tenant_id", response.json())
         self.assertNotIn("email", response.json())
         self.assertNotIn("phone_no", response.json())
+        self.assertNotIn("address", response.json())
 
     def test_create_contact_request_requires_tenant_authentication(
         self,

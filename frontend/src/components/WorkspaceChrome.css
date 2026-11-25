@@ -1,0 +1,162 @@
+.workspace-sidepanel {
+  overflow-y: auto;
+}
+.workspace-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 8px 30px;
+  text-decoration: none;
+  color: #234637;
+}
+.workspace-brand > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  background: #176b55;
+  color: white;
+  border-radius: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.workspace-brand strong,
+.workspace-brand small {
+  display: block;
+}
+.workspace-brand small {
+  text-transform: capitalize;
+  color: #5f7167;
+  font-size: 0.8125rem;
+  margin-top: 4px;
+}
+.workspace-nav-caption {
+  text-transform: uppercase;
+  font-size: 0.8125rem;
+  color: #5f7167;
+  letter-spacing: 0.08em;
+  margin: 0 12px 12px;
+}
+.workspace-sidepanel .workspace-nav-item {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  text-decoration: none;
+  color: #4e6256;
+  text-align: left;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  width: 100%;
+}
+.workspace-sidepanel .workspace-nav-item.active {
+  background: #eaf4ec;
+  color: #176b55;
+  box-shadow: inset 3px 0 #176b55;
+}
+.workspace-sidepanel .workspace-nav-item:hover {
+  background: #f0f5f1;
+  color: #176b55;
+}
+.workspace-account {
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+  padding: 24px 10px 0;
+  font-size: 0.875rem;
+  border-top: 1px solid #e1e8e3;
+  overflow-wrap: anywhere;
+}
+.workspace-account > .rental-status {
+  width: fit-content;
+  text-transform: capitalize;
+}
+.role-workspace-page {
+  min-width: 0;
+}
+.role-workspace-content {
+  min-width: 0;
+  flex: 1;
+  padding: 32px 40px;
+}
+.role-workspace-header {
+  margin: 0 0 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid #dce6e0;
+}
+.role-workspace-header h1 {
+  margin: 8px 0;
+}
+.role-workspace-header > p:last-child {
+  color: #52665a;
+  margin: 8px 0 0;
+}
+.role-report-content {
+  padding: 0;
+  width: 100%;
+}
+.role-report-content > section {
+  max-width: none !important;
+}
+.role-report-content.conversations-page {
+  padding: 0;
+  max-width: none;
+}
+.workspace-tenant-header {
+  flex-wrap: wrap;
+}
+.workspace-current-account {
+  color: #52665a;
+  font-size: 0.875rem;
+  width: 100%;
+}
+.tenant-nav-link[aria-current="page"] {
+  color: #176b55;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+@media (max-width: 800px) {
+  .role-workspace-content {
+    padding: 24px 16px;
+  }
+  .workspace-sidepanel {
+    height: auto;
+    min-height: 0;
+    position: static;
+    width: 100%;
+    flex-basis: auto;
+    padding: 18px;
+  }
+  .workspace-sidepanel nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .workspace-sidepanel .workspace-nav-item {
+    width: auto;
+  }
+  .workspace-brand {
+    margin-bottom: 20px;
+  }
+  .workspace-account {
+    margin-top: 18px;
+    padding-top: 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .workspace-account > span:not(.rental-status) {
+    grid-column: 1;
+  }
+  .role-workspace-page:not(.tenant-page) {
+    flex-direction: column;
+  }
+  .workspace-tenant-header .tenant-nav {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

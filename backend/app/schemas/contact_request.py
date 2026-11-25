@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AliasChoices, AliasPath, BaseModel, ConfigDict, Field
 
 
 class ContactRequestStatusUpdate(BaseModel):
@@ -15,6 +15,10 @@ class ContactRequestResponse(BaseModel):
     listing_id: int
     status: str
     requested_at: datetime
+    listing_title: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("listing_title", AliasPath("listing", "title")),
+    )
 
 
 class LandlordContactRequestResponse(ContactRequestResponse):

@@ -21,7 +21,6 @@ import "./ConversationsPage.css";
 type ConversationsPageProps = {
   accessToken: string;
   onNavigate: (path: string) => void;
-  onSignOut: () => void;
   profile: UserProfile;
 };
 
@@ -39,7 +38,6 @@ function formatConversationDate(value: string): string {
 export default function ConversationsPage({
   accessToken,
   onNavigate,
-  onSignOut,
   profile,
 }: ConversationsPageProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -81,9 +79,7 @@ export default function ConversationsPage({
       ) ?? null,
     [conversations, selectedConversationId],
   );
-  const dashboardPath = profile.roles.includes("landlord")
-    ? "/landlord"
-    : "/tenant";
+  const requestedEnquiry = Number(new URLSearchParams(window.location.search).get("request"));
 
   useEffect(() => {
     let active = true;
@@ -96,13 +92,15 @@ export default function ConversationsPage({
         if (active) {
           setConversations(results);
           setSelectedConversationId((current) =>
-            current !== null &&
+            requestedEnquiry > 0
+              ? results.find((conversation) => conversation.contact_request_id === requestedEnquiry)?.conversation_id ?? null
+              : (current !== null &&
             results.some(
               (conversation) =>
                 conversation.conversation_id === current,
             )
               ? current
-              : (results[0]?.conversation_id ?? null),
+              : (results[0]?.conversation_id ?? null)),
           );
         }
       } catch (error: unknown) {
@@ -124,7 +122,7 @@ export default function ConversationsPage({
     return () => {
       active = false;
     };
-  }, [accessToken, conversationsReloadKey]);
+  }, [accessToken, conversationsReloadKey, requestedEnquiry]);
 
   useEffect(() => {
     let active = true;
@@ -364,33 +362,18 @@ export default function ConversationsPage({
   }
 
   return (
-    <main className="page-shell conversations-page">
+    <section className="role-report-content conversations-page">
       <section className="conversations-shell">
         <header className="conversations-header">
           <div>
             <p className="eyebrow">Room Rentals</p>
-            <h1>Your conversations</h1>
+            <h2>Your conversations</h2>
             <p className="intro">
               Talk with tenants and landlords about room enquiries.
             </p>
           </div>
-          <nav aria-label="Conversation navigation">
-            <AppLink
-              className="conversations-back-link"
-              href={dashboardPath}
-              onNavigate={onNavigate}
-            >
-              Back to dashboard
-            </AppLink>
-            <button
-              className="secondary-button"
-              onClick={onSignOut}
-              type="button"
-            >
-              Sign out
-            </button>
-          </nav>
         </header>
+        {requestedEnquiry > 0 && !isLoadingConversations && !conversations.some((conversation) => conversation.contact_request_id === requestedEnquiry) && <p role="status">This enquiry's conversation is unavailable. Select another conversation from your inbox.</p>}
 
         <div className="conversations-layout">
           <section
@@ -545,11 +528,12 @@ export default function ConversationsPage({
                           ? " selected"
                           : ""
                       }`}
-                      onClick={() =>
+                      onClick={() => {
                         setSelectedConversationId(
                           conversation.conversation_id,
-                        )
-                      }
+                        );
+                        onNavigate(`/conversations?request=${conversation.contact_request_id}`);
+                      }}
                       type="button"
                     >
                       <span aria-hidden="true" className="conversation-avatar">
@@ -557,7 +541,7 @@ export default function ConversationsPage({
                       </span>
                       <span className="conversation-list-copy">
                         <strong>
-                          Contact request #{conversation.contact_request_id}
+                          Enquiry request #{conversation.contact_request_id}
                         </strong>
                         <time dateTime={conversation.created_at}>
                           Started{" "}
@@ -731,6 +715,6 @@ export default function ConversationsPage({
           </section>
         </div>
       </section>
-    </main>
+    </section>
   );
 }

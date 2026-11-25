@@ -16,6 +16,8 @@ import {
   type UserProfile,
 } from "../api";
 import AppLink from "../components/AppLink";
+import { TenantWorkspaceHeader } from "../components/WorkspaceChrome";
+import { enquiryStatusLabels } from "../features/rentals/workflow";
 import TenantFutureRentalOpportunitiesPanel from "../components/TenantFutureRentalOpportunitiesPanel";
 import RentalInterestNotificationsPanel from "../components/RentalInterestNotificationsPanel";
 import TenantRentalInterestsPanel from "../components/TenantRentalInterestsPanel";
@@ -25,6 +27,7 @@ import "./DashboardPage.css";
 export type DashboardRole = "tenant" | "landlord" | "admin";
 
 type DashboardPageProps = {
+  view?: string;
   accessToken: string;
   onNavigate: (path: string) => void;
   profile: UserProfile;
@@ -102,6 +105,7 @@ function getSavedSearchPath(search: SavedSearch): string {
 }
 
 export default function DashboardPage({
+  view = "overview",
   accessToken,
   onNavigate,
   profile,
@@ -110,7 +114,10 @@ export default function DashboardPage({
   onOpenReports,
 }: DashboardPageProps) {
   const content = dashboardContent[role];
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState(view);
+  useEffect(() => {
+    setActiveView(["overview", "saved", "enquiries", "future"].includes(view) ? view : "overview");
+  }, [view]);
   const [rentalInterestRefreshKey, setRentalInterestRefreshKey] = useState(0);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [contactRequestsError, setContactRequestsError] = useState<
@@ -456,41 +463,7 @@ export default function DashboardPage({
     return (
       <main className="page-shell tenant-page">
         <div className="tenant-dashboard" data-view={activeView}>
-          <header className="tenant-topbar">
-            <AppLink
-              className="tenant-brand"
-              href="/"
-              onNavigate={onNavigate}
-            >
-              <span aria-hidden="true" className="tenant-brand-mark">
-                R
-              </span>
-              <span>Room Rentals</span>
-            </AppLink>
-            <nav aria-label="Tenant navigation" className="tenant-nav">
-              <AppLink
-                className="tenant-nav-link"
-                href="/"
-                onNavigate={onNavigate}
-              >
-                Browse rooms
-              </AppLink>
-              <AppLink
-                className="tenant-nav-link"
-                href="/conversations"
-                onNavigate={onNavigate}
-              >
-                Messages
-              </AppLink>
-              <button
-                className="tenant-signout"
-                onClick={onSignOut}
-                type="button"
-              >
-                Sign out
-              </button>
-            </nav>
-          </header>
+          <TenantWorkspaceHeader profile={profile} onNavigate={onNavigate} onSignOut={onSignOut} currentPath="/tenant" />
 
           <section aria-labelledby="dashboard-heading" className="tenant-hero">
             <div className="tenant-hero-copy">
@@ -578,7 +551,10 @@ export default function DashboardPage({
                 key={value}
                 type="button"
                 aria-current={activeView === value ? "page" : undefined}
-                onClick={() => setActiveView(value)}
+                onClick={() => {
+                  setActiveView(value);
+                  onNavigate(value === "overview" ? "/tenant" : `/tenant?view=${value}`);
+                }}
               >
                 {label}
               </button>
@@ -717,7 +693,7 @@ export default function DashboardPage({
                                     href={`/listings/${contactRequest.listing_id}`}
                                     onNavigate={onNavigate}
                                   >
-                                    Room listing #{contactRequest.listing_id}
+                                    {contactRequest.listing_title ?? `Room listing #${contactRequest.listing_id}`}
                                   </AppLink>
                                   <time dateTime={contactRequest.requested_at}>
                                     Sent {formatDate(contactRequest.requested_at)}
@@ -727,7 +703,7 @@ export default function DashboardPage({
                                   <span
                                     className={`tenant-status tenant-status-${contactRequest.status}`}
                                   >
-                                    {contactRequest.status}
+                                    {enquiryStatusLabels[contactRequest.status]}
                                   </span>
                                   {contactRequest.status === "pending" && (
                                     <button
@@ -749,6 +725,7 @@ export default function DashboardPage({
                                 </div>
                               </div>
 
+                              <AppLink href={`/conversations?request=${contactRequest.request_id}`} onNavigate={onNavigate}>Open messages</AppLink>
                               {contactRequest.status === "approved" &&
                                 isLoadingReviews && (
                                   <p

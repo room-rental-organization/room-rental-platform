@@ -26,6 +26,8 @@ export type Listing = {
   date_available: string;
   status: string;
   created_at: string;
+  availability_status?: "available" | "reserved" | "occupied";
+  updated_at?: string;
   google_place_id?: string | null;
   latitude?: number | null;
   longitude?: number | null;

@@ -17,12 +17,15 @@ import {
   type UserProfile,
 } from "../api";
 import AppLink from "../components/AppLink";
+import { WorkspaceSidebar } from "../components/WorkspaceChrome";
+import { enquiryStatusLabels } from "../features/rentals/workflow";
 import GoogleAddressSearch, {
   type GoogleAddressSelection,
 } from "../components/GoogleAddressSearch";
 import LandlordRentalInterestsPanel from "../components/LandlordRentalInterestsPanel";
 import RentalInterestNotificationsPanel from "../components/RentalInterestNotificationsPanel";
 import RoomMap, { type MapPoint } from "../components/RoomMap";
+import { AvailabilityControl, BusinessPanel } from "../features/rentals/BusinessPanel";
 import type {
   Amenity,
   Area,
@@ -32,6 +35,7 @@ import type {
 import "./LandlordDashboardPage.css";
 
 type LandlordDashboardPageProps = {
+  view?: string;
   accessToken: string;
   onNavigate: (path: string) => void;
   profile: UserProfile;
@@ -116,12 +120,16 @@ function formatRequestDate(value: string): string {
 }
 
 export default function LandlordDashboardPage({
+  view = "overview",
   accessToken,
   onNavigate,
   profile,
   onSignOut,
 }: LandlordDashboardPageProps) {
-  const [activeView, setActiveView] = useState("overview");
+  const [activeView, setActiveView] = useState(view);
+  useEffect(() => {
+    setActiveView(["overview", "listings", "enquiries", "future"].includes(view) ? view : "overview");
+  }, [view]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
@@ -150,7 +158,7 @@ export default function LandlordDashboardPage({
 
   function openWorkspace(view: string): void {
     setActiveView(view);
-    window.scrollTo({ top: 0 });
+    onNavigate(view === "overview" ? "/landlord" : `/landlord?view=${view}`);
   }
 
   async function refreshListings(): Promise<void> {
@@ -278,8 +286,8 @@ export default function LandlordDashboardPage({
       );
       setContactRequestNotice(
         decision === "approved"
-          ? "Contact request approved."
-          : "Contact request rejected.",
+          ? "Enquiry accepted."
+          : "Enquiry declined.",
       );
     } catch (error: unknown) {
       setContactRequestError(getErrorMessage(error));
@@ -507,50 +515,7 @@ export default function LandlordDashboardPage({
 
   return (
     <main className="page-shell landlord-page" data-view={activeView}>
-      <aside aria-label="Landlord workspace" className="landlord-sidebar">
-        <AppLink
-          className="landlord-brand"
-          href="/landlord"
-          onNavigate={onNavigate}
-        >
-          <span aria-hidden="true" className="landlord-brand-mark">
-            R
-          </span>
-          <span>
-            <strong>Room Rentals</strong>
-            <small>LANDLORD PORTAL</small>
-          </span>
-        </AppLink>
-        <p className="landlord-nav-label">WORKSPACE</p>
-        <nav aria-label="Dashboard sections" className="landlord-sidebar-nav">
-          <button type="button" className={activeView === "overview" ? "active" : ""} aria-current={activeView === "overview" ? "page" : undefined} onClick={() => openWorkspace("overview")}>
-            <span aria-hidden="true">▦</span> Dashboard
-          </button>
-          <button type="button" className={activeView === "listings" ? "active" : ""} aria-current={activeView === "listings" ? "page" : undefined} onClick={() => openWorkspace("listings")}>
-            <span aria-hidden="true">⌂</span> Listings
-          </button>
-          <AppLink href="/conversations" onNavigate={onNavigate}>
-            <span aria-hidden="true">▤</span> Messages
-          </AppLink>
-          <button type="button" className={activeView === "enquiries" ? "active" : ""} aria-current={activeView === "enquiries" ? "page" : undefined} onClick={() => openWorkspace("enquiries")}>
-            <span aria-hidden="true">◷</span> Inquiries
-            {pendingRequestCount > 0 && (
-              <span className="landlord-nav-count">{pendingRequestCount}</span>
-            )}
-          </button>
-          <button type="button" className={activeView === "future" ? "active" : ""} aria-current={activeView === "future" ? "page" : undefined} onClick={() => openWorkspace("future")}>
-            <span aria-hidden="true">⌁</span> Future interest
-          </button>
-        </nav>
-        <div className="landlord-sidebar-bottom">
-          <AppLink href="/" onNavigate={onNavigate}>
-            Browse public rooms
-          </AppLink>
-          <button onClick={onSignOut} type="button">
-            <span aria-hidden="true">↪</span> Sign out
-          </button>
-        </div>
-      </aside>
+      <WorkspaceSidebar role="landlord" currentPath="/landlord" activeView={activeView} onDashboardView={openWorkspace} profile={profile} onNavigate={onNavigate} onSignOut={onSignOut} />
       <section className="landlord-dashboard">
         <header className="landlord-header">
           <div className="landlord-welcome">
@@ -573,9 +538,9 @@ export default function LandlordDashboardPage({
               />
             </label>
             <span
-              aria-label={`${pendingRequestCount} pending inquiries`}
+              aria-label={`${pendingRequestCount} pending enquiries`}
               className="landlord-notification"
-              title={`${pendingRequestCount} pending inquiries`}
+              title={`${pendingRequestCount} pending enquiries`}
             >
               ♧
               {pendingRequestCount > 0 && (
@@ -622,7 +587,7 @@ export default function LandlordDashboardPage({
               <div>
                 <p>Active listings</p>
                 <strong>{isLoading ? "—" : activeListingCount}</strong>
-                <span>Visible to room seekers</span>
+                <span>Approved portfolio listings</span>
               </div>
             </article>
             <article className="landlord-stat-card stat-review">
@@ -636,7 +601,7 @@ export default function LandlordDashboardPage({
             <article className="landlord-stat-card stat-inquiries">
               <span aria-hidden="true" className="landlord-stat-icon">✉</span>
               <div>
-                <p>New inquiries</p>
+                <p>New enquiries</p>
                 <strong>
                   {isLoadingContactRequests ? "—" : pendingRequestCount}
                 </strong>
@@ -656,6 +621,8 @@ export default function LandlordDashboardPage({
             {notice}
           </p>
         )}
+
+        {activeView === "overview" && !isLoading && <BusinessPanel token={accessToken} listings={listings} key={listings.map((listing) => `${listing.listing_id}-${listing.availability_status}`).join(",")} />}
 
         {activeView === "overview" && !isLoading && (
           <RentalInterestNotificationsPanel
@@ -679,13 +646,13 @@ export default function LandlordDashboardPage({
           >
           <div className="landlord-listings-heading">
             <div>
-              <h2 id="contact-requests-heading">Recent inquiries</h2>
+              <h2 id="contact-requests-heading">Recent enquiries</h2>
               <p className="landlord-panel-subtitle">
                 Messages from prospective tenants
               </p>
             </div>
             <button
-              aria-label="Refresh inquiries"
+              aria-label="Refresh enquiries"
               className="landlord-icon-button"
               disabled={isLoadingContactRequests}
               onClick={() => void refreshContactRequests()}
@@ -712,13 +679,13 @@ export default function LandlordDashboardPage({
             </p>
           )}
           {isLoadingContactRequests && (
-            <p role="status">Loading contact requests...</p>
+            <p role="status">Loading enquiries...</p>
           )}
           {!isLoadingContactRequests &&
             contactRequestError === null &&
             contactRequests.length === 0 && (
               <p className="landlord-empty-state">
-                You have not received any contact requests.
+                You have not received any enquiries.
               </p>
             )}
           {!isLoadingContactRequests &&
@@ -746,16 +713,17 @@ export default function LandlordDashboardPage({
                           ) ?? `Room listing #${contactRequest.listing_id}`}
                         </p>
                         <p>
-                          Requested{" "}
+                          {contactRequest.tenant_name ? `${contactRequest.tenant_name} · Requested ` : "Requested "}
                           {formatRequestDate(contactRequest.requested_at)}
                         </p>
                       </div>
                       <span
                         className={`listing-status status-${contactRequest.status}`}
                       >
-                        {contactRequest.status}
+                        {enquiryStatusLabels[contactRequest.status]}
                       </span>
                     </div>
+                    <AppLink href={`/conversations?request=${contactRequest.request_id}`} onNavigate={onNavigate}>Open messages</AppLink>
                     {contactRequest.status === "pending" && (
                       <div className="landlord-listing-actions">
                         <button
@@ -772,7 +740,7 @@ export default function LandlordDashboardPage({
                           {updatingContactRequestId ===
                           contactRequest.request_id
                             ? "Updating..."
-                            : "Approve"}
+                            : "Accept enquiry"}
                         </button>
                         <button
                           className="secondary-button danger-button"
@@ -785,7 +753,7 @@ export default function LandlordDashboardPage({
                           }
                           type="button"
                         >
-                          Reject
+                          Decline enquiry
                         </button>
                       </div>
                     )}
@@ -1114,6 +1082,7 @@ export default function LandlordDashboardPage({
                       Amenities: {listing.amenities.join(", ")}
                     </p>
                   )}
+                  {listing.status === "active" && <AvailabilityControl key={`${listing.listing_id}-${listing.availability_status}`} token={accessToken} listing={listing} onUpdated={(updated) => setListings((current) => current.map((item) => item.listing_id === updated.listing_id ? updated : item))} />}
                   {listing.photos.length > 0 && (
                     <div className="landlord-photo-list landlord-extra-photos">
                       {listing.photos.map((photo) => (

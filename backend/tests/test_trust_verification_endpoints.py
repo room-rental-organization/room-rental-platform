@@ -141,8 +141,8 @@ class TrustVerificationEndpointTests(unittest.TestCase):
             self.landlord.phone_no,
         )
 
-    def test_public_trust_endpoint_returns_safe_status_only(self) -> None:
-        self.service.public_trust_for_listing.return_value = (
+    def test_owner_trust_endpoint_returns_safe_status_only_without_caching(self) -> None:
+        self.service.trust_for_owned_listing.return_value = (
             PublicLandlordTrustResponse(
                 phone_verified=True,
                 identity_status="unverified",
@@ -156,6 +156,8 @@ class TrustVerificationEndpointTests(unittest.TestCase):
         response = self.client.get("/api/v1/listings/12/trust")
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.service.trust_for_owned_listing.assert_called_once_with(12, 8)
         self.assertEqual(response.json()["listing_verification_status"], "under_review")
         for sensitive_field in (
             "phone_no",
@@ -164,6 +166,34 @@ class TrustVerificationEndpointTests(unittest.TestCase):
             "decision_reason",
         ):
             self.assertNotIn(sensitive_field, response.json())
+
+    def test_trust_summary_requires_sign_in(self) -> None:
+        self.app.dependency_overrides.pop(landlord_dependency)
+
+        response = self.client.get("/api/v1/listings/12/trust")
+
+        self.assertEqual(response.status_code, 401)
+        self.service.trust_for_owned_listing.assert_not_called()
+
+    def test_trust_summary_rejects_tenants_and_admins(self) -> None:
+        self.app.dependency_overrides.pop(landlord_dependency)
+        self.app.dependency_overrides[get_current_user] = lambda: User(user_id=7)
+        for role in ("tenant", "admin"):
+            with self.subTest(role=role):
+                roles = Mock()
+                roles.list_for_user.return_value = [Role(role_id=3, name=role)]
+                with patch("app.api.dependencies.RoleRepository", return_value=roles):
+                    response = self.client.get("/api/v1/listings/12/trust")
+                self.assertEqual(response.status_code, 403)
+        self.service.trust_for_owned_listing.assert_not_called()
+
+    def test_trust_summary_hides_other_landlords_listings(self) -> None:
+        self.service.trust_for_owned_listing.return_value = None
+
+        response = self.client.get("/api/v1/listings/12/trust")
+
+        self.assertEqual(response.status_code, 404)
+        self.service.trust_for_owned_listing.assert_called_once_with(12, 8)
 
 
 if __name__ == "__main__":

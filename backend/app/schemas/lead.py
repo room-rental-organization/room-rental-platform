@@ -1,7 +1,14 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    AliasChoices,
+    AliasPath,
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+)
 
 from app.schemas.report import ReportHistoryResponse, ReportReason, ReportStatus
 
@@ -91,6 +98,18 @@ class LandlordLeadResponse(BaseModel):
     tenant_id: int
     landlord_id: int
     listing_id: int
+    listing_title: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("listing_title", AliasPath("listing", "title")),
+    )
+    tenant_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("tenant_name", AliasPath("tenant", "full_name")),
+    )
+    landlord_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("landlord_name", AliasPath("landlord", "full_name")),
+    )
     stage: LeadStage
     dispute_status: LeadDisputeStatus
     rented_at: datetime | None

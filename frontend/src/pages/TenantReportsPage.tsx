@@ -12,6 +12,7 @@ import {
 } from "../api";
 
 type TenantReportsPageProps = {
+  role: "tenant" | "landlord";
   accessToken: string;
   profile: UserProfile;
   onBackToDashboard: () => void;
@@ -23,6 +24,11 @@ const reasons: { value: ReportReason; label: string }[] = [
   { value: "fake_listing", label: "Fake listing" },
   { value: "inaccurate_info", label: "Inaccurate information" },
   { value: "abusive", label: "Abusive behavior" },
+  { value: "misleading_price", label: "Misleading price" },
+  { value: "incorrect_availability", label: "Incorrect availability" },
+  { value: "unauthorized_property", label: "Unauthorized property" },
+  { value: "harassment", label: "Harassment" },
+  { value: "fake_account", label: "Fake account" },
   { value: "other", label: "Other" },
 ];
 
@@ -55,6 +61,7 @@ function formatDate(value: string): string {
 }
 
 function getReportTargetLabel(report: ReportResponse): string {
+  if (report.lead_id != null) return `Lead enquiry #${report.lead_id}`;
   if (report.target_user_id !== null) {
     const accountLabel = `Account #${report.target_user_id}`;
     return report.listing_id === null
@@ -67,6 +74,7 @@ function getReportTargetLabel(report: ReportResponse): string {
 }
 
 export default function TenantReportsPage({
+  role,
   accessToken,
   profile,
   onBackToDashboard,
@@ -151,7 +159,7 @@ export default function TenantReportsPage({
   }
 
   return (
-    <main className="page-shell">
+    <section className="role-report-content">
       <section
         aria-labelledby="tenant-reports-heading"
         style={{
@@ -173,9 +181,9 @@ export default function TenantReportsPage({
           Back to dashboard
         </button>
         <p className="eyebrow" style={{ marginTop: 24 }}>
-          Room Rentals · Tenant reports
+          Room Rentals · {role === "landlord" ? "Landlord" : "Tenant"} reports
         </p>
-        <h1 id="tenant-reports-heading">Report an issue</h1>
+        <h2 id="tenant-reports-heading">Report an issue</h2>
         <p className="intro">
           Welcome, {profile.full_name}. Submit a report and check its status
           here.
@@ -342,6 +350,6 @@ export default function TenantReportsPage({
           </ol>
         </section>
       </section>
-    </main>
+    </section>
   );
 }

@@ -36,6 +36,11 @@ export type ReportReason =
   | "fake_listing"
   | "inaccurate_info"
   | "abusive"
+  | "misleading_price"
+  | "incorrect_availability"
+  | "unauthorized_property"
+  | "harassment"
+  | "fake_account"
   | "other";
 export type ReportStatus =
   | "open"
@@ -59,6 +64,7 @@ export interface ReportResponse {
   report_id: number;
   listing_id: number | null;
   target_user_id: number | null;
+  lead_id?: number | null;
   tenant_id: number;
   admin_id: number | null;
   reason: ReportReason;
@@ -71,7 +77,7 @@ export interface ReportHistoryRecord {
   history_id: number;
   report_id: number;
   actor_user_id: number;
-  action: "submitted" | "assigned" | "resolved" | "dismissed";
+  action: "submitted" | "assigned" | "resolved" | "dismissed" | "note_added";
   note: string | null;
   created_at: string;
 }
@@ -81,6 +87,10 @@ export interface ContactRequest {
   listing_id: number;
   status: "pending" | "approved" | "rejected" | "cancelled";
   requested_at: string;
+  listing_title?: string;
+  listing_address?: string;
+  tenant_name?: string;
+  conversation_id?: number | null;
 }
 
 export interface Conversation {
@@ -339,7 +349,7 @@ export function buildApiUrl(path: string): string {
   return `${apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-async function requestJson<T>(
+export async function requestJson<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {

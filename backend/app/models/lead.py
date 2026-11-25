@@ -15,9 +15,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.listing import Listing
+from app.models.user import User
 
 
 class Lead(Base):
@@ -120,6 +122,9 @@ class Lead(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    listing: Mapped[Listing] = relationship(lazy="selectin")
+    tenant: Mapped[User] = relationship(foreign_keys=[tenant_id], lazy="selectin")
+    landlord: Mapped[User] = relationship(foreign_keys=[landlord_id], lazy="selectin")
 
 
 class LeadStageHistory(Base):

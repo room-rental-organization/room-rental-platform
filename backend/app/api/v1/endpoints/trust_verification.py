@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated, NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -264,14 +264,16 @@ def decide_verification(
     "/listings/{listing_id}/trust",
     response_model=PublicLandlordTrustResponse,
 )
-def get_public_listing_trust(
+def get_owned_listing_trust(
     listing_id: Annotated[int, Path(gt=0)],
+    response: Response,
+    current_landlord: User = Depends(landlord_dependency),
     service: TrustVerificationService = Depends(
         get_trust_verification_service,
     ),
 ) -> PublicLandlordTrustResponse:
     try:
-        trust = service.public_trust_for_listing(listing_id)
+        trust = service.trust_for_owned_listing(listing_id, current_landlord.user_id)
     except SQLAlchemyError as exc:
         _raise_http_error(exc)
     if trust is None:
@@ -279,4 +281,5 @@ def get_public_listing_trust(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Listing not found.",
         )
+    response.headers["Cache-Control"] = "no-store"
     return trust
