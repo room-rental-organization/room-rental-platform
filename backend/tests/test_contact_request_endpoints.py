@@ -18,7 +18,7 @@ from app.db.session import get_db
 from app.models.contact_request import ContactRequest
 from app.models.user import User
 from app.services.contact_request_service import (
-    ContactRequestForbiddenError,
+    ContactRequestDuplicateError,
     ContactRequestForbiddenError,
     ContactRequestListingUnavailableError,
     ContactRequestNotFoundError,
@@ -130,7 +130,15 @@ class ContactRequestEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
 
     def test_list_received_requests_uses_authenticated_landlord(self) -> None:
-        self.service.list_for_landlord.return_value = [self.make_request()]
+        self.service.list_for_landlord_with_details.return_value = [
+            (
+                self.make_request(),
+                "Room listing",
+                "Test address",
+                "Tenant name",
+                17,
+            ),
+        ]
 
         response = self.client.get(
             "/api/v1/users/me/received-requests",
@@ -145,13 +153,17 @@ class ContactRequestEndpointTests(unittest.TestCase):
                     "listing_id": 14,
                     "status": "pending",
                     "requested_at": "2026-10-30T08:00:00",
+                    "listing_title": "Room listing",
+                    "listing_address": "Test address",
+                    "tenant_name": "Tenant name",
+                    "conversation_id": 17,
                 },
             ],
         )
-        self.service.list_for_landlord.assert_called_once_with(8)
+        self.service.list_for_landlord_with_details.assert_called_once_with(8)
 
     def test_list_received_requests_returns_empty_list(self) -> None:
-        self.service.list_for_landlord.return_value = []
+        self.service.list_for_landlord_with_details.return_value = []
 
         response = self.client.get(
             "/api/v1/users/me/received-requests",
@@ -171,10 +183,10 @@ class ContactRequestEndpointTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
-        self.service.list_for_landlord.assert_not_called()
+        self.service.list_for_landlord_with_details.assert_not_called()
 
     def test_list_received_requests_handles_database_error(self) -> None:
-        self.service.list_for_landlord.side_effect = SQLAlchemyError(
+        self.service.list_for_landlord_with_details.side_effect = SQLAlchemyError(
             "database failure"
         )
 
@@ -247,6 +259,19 @@ class ContactRequestEndpointTests(unittest.TestCase):
         response = self.client.post("/api/v1/listings/14/contact-requests")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_create_contact_request_maps_pending_duplicate_to_conflict(
+        self,
+    ) -> None:
+        self.service.create_request.side_effect = ContactRequestDuplicateError(
+            "You already have a pending enquiry for this listing.",
+        )
+
+        response = self.client.post(
+            "/api/v1/listings/14/contact-requests",
+        )
+
+        self.assertEqual(response.status_code, 409)
 
     def test_create_contact_request_returns_service_unavailable_on_database_error(
         self,

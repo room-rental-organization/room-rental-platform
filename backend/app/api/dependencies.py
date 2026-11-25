@@ -66,3 +66,22 @@ def require_role(required_role: str) -> Callable[..., User]:
         return current_user
 
     return role_dependency
+
+
+def require_any_role(*required_roles: str) -> Callable[..., User]:
+    if not required_roles or any(role not in _allowed_roles for role in required_roles):
+        raise ValueError("At least one supported role is required.")
+
+    def role_dependency(
+        current_user: Annotated[User, Depends(get_current_user)],
+        db: Annotated[Session, Depends(get_db)],
+    ) -> User:
+        user_roles = RoleRepository(db).list_for_user(current_user.user_id)
+        if not any(role.name in required_roles for role in user_roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to perform this action.",
+            )
+        return current_user
+
+    return role_dependency

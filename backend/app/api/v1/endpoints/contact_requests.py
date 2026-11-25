@@ -7,14 +7,15 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user, require_role
 from app.db.session import get_db
-from app.models.contact_request import ContactRequest
 from app.models.user import User
 from app.repositories.role_repository import RoleRepository
 from app.schemas.contact_request import (
     ContactRequestResponse,
     ContactRequestStatusUpdate,
+    LandlordContactRequestResponse,
 )
 from app.services.contact_request_service import (
+    ContactRequestDuplicateError,
     ContactRequestForbiddenError,
     ContactRequestListingUnavailableError,
     ContactRequestNotFoundError,
@@ -61,14 +62,16 @@ def list_my_contact_requests(
 
 @router.get(
     "/users/me/received-requests",
-    response_model=list[ContactRequestResponse],
+    response_model=list[LandlordContactRequestResponse],
 )
 def list_received_contact_requests(
     current_landlord: User = Depends(landlord_dependency),
     service: ContactRequestService = Depends(get_contact_request_service),
-) -> list[ContactRequestResponse]:
+) -> list[LandlordContactRequestResponse]:
     try:
-        requests = service.list_for_landlord(current_landlord.user_id)
+        requests = service.list_for_landlord_with_details(
+            current_landlord.user_id,
+        )
     except SQLAlchemyError as exc:
         logger.exception("Failed to retrieve landlord contact requests")
         raise HTTPException(
@@ -77,8 +80,23 @@ def list_received_contact_requests(
         ) from exc
 
     return [
-        ContactRequestResponse.model_validate(contact_request)
-        for contact_request in requests
+        LandlordContactRequestResponse(
+            request_id=contact_request.request_id,
+            listing_id=contact_request.listing_id,
+            status=contact_request.status,
+            requested_at=contact_request.requested_at,
+            listing_title=listing_title,
+            listing_address=listing_address,
+            tenant_name=tenant_name,
+            conversation_id=conversation_id,
+        )
+        for (
+            contact_request,
+            listing_title,
+            listing_address,
+            tenant_name,
+            conversation_id,
+        ) in requests
     ]
 
 
@@ -105,6 +123,11 @@ def create_contact_request(
     except ContactRequestForbiddenError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except ContactRequestDuplicateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     except SQLAlchemyError as exc:

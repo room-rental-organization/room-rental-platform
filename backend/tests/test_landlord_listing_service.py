@@ -57,6 +57,8 @@ class LandlordListingServiceTests(unittest.TestCase):
             date_available=date(2026, 11, 1),
             status=status,
             created_at=datetime(2026, 10, 1),
+            updated_at=datetime(2026, 10, 2),
+            availability_status="available",
         )
 
     @staticmethod
@@ -76,6 +78,7 @@ class LandlordListingServiceTests(unittest.TestCase):
         def add_listing(listing: Listing) -> Listing:
             listing.listing_id = 12
             listing.created_at = datetime(2026, 10, 1)
+            listing.updated_at = datetime(2026, 10, 1)
             return listing
 
         self.listings.add.side_effect = add_listing
@@ -177,6 +180,7 @@ class LandlordListingServiceTests(unittest.TestCase):
         def add_listing(listing: Listing) -> Listing:
             listing.listing_id = 12
             listing.created_at = datetime(2026, 10, 1)
+            listing.updated_at = datetime(2026, 10, 1)
             return listing
 
         self.listings.add.side_effect = add_listing
@@ -297,6 +301,38 @@ class LandlordListingServiceTests(unittest.TestCase):
         result = self.service.withdraw_listing(8, 12)
 
         self.assertEqual(result.status, "closed")
+        self.db.commit.assert_not_called()
+
+    def test_update_availability_keeps_moderation_status_active(self) -> None:
+        listing = self.make_listing(status="active")
+        self.listings.get_owned.return_value = listing
+
+        result = self.service.update_availability(8, 12, "reserved")
+
+        self.assertEqual(result.status, "active")
+        self.assertEqual(result.availability_status, "reserved")
+        self.assertGreaterEqual(
+            result.updated_at,
+            datetime(2026, 10, 2),
+        )
+        self.db.commit.assert_called_once()
+
+    def test_update_availability_rejects_non_active_listing(self) -> None:
+        self.listings.get_owned.return_value = self.make_listing(
+            status="draft",
+        )
+
+        with self.assertRaises(ListingStateError):
+            self.service.update_availability(8, 12, "occupied")
+
+        self.db.commit.assert_not_called()
+
+    def test_update_availability_rejects_listing_not_owned(self) -> None:
+        self.listings.get_owned.return_value = None
+
+        with self.assertRaises(ListingNotFoundError):
+            self.service.update_availability(8, 12, "occupied")
+
         self.db.commit.assert_not_called()
 
     def test_photo_upload_resets_submitted_listing_to_draft(self) -> None:

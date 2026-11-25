@@ -46,13 +46,23 @@ class WhatsAppPrivacyTests(unittest.TestCase):
                 phone_lookup_hash("+27123456789"),
             )
 
-    def test_phone_number_requires_e164_format(self) -> None:
+    def test_phone_number_normalizes_e164_and_south_african_local_formats(
+        self,
+    ) -> None:
         self.assertEqual(
             normalize_phone_number(" +27123456789 "),
             "+27123456789",
         )
+        self.assertEqual(
+            normalize_phone_number("082 123-4567"),
+            "+27821234567",
+        )
+        self.assertEqual(
+            normalize_phone_number(" +27 (82) 123-4567 "),
+            "+27821234567",
+        )
         with self.assertRaises(ValueError):
-            normalize_phone_number("07123456789")
+            normalize_phone_number("082123")
 
     def test_message_inputs_reject_phone_numbers_and_responses_redact_legacy(
         self,

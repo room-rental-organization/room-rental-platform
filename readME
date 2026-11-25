@@ -3,9 +3,3 @@ Set-Location backend
 
 Set-Location frontend
 npm run dev -- --host 127.0.0.1
-
-Conversations are temporarily unavailable.
-Ophayo@517
-
-nenewandile57@gmail.com
-WandileNene@517

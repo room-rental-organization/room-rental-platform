@@ -6,8 +6,10 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Identity,
+    Index,
     String,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,6 +22,14 @@ class ContactRequest(Base):
         CheckConstraint(
             "status IN ('pending', 'approved', 'rejected', 'cancelled')",
             name="contact_requests_status_check",
+        ),
+        Index(
+            "contact_requests_one_pending_per_tenant_listing_idx",
+            "tenant_id",
+            "listing_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+            sqlite_where=text("status = 'pending'"),
         ),
     )
 

@@ -6,8 +6,11 @@ from pydantic import (
     Field,
     SecretStr,
     StringConstraints,
+    field_validator,
     model_validator,
 )
+
+from app.core.whatsapp_privacy import normalize_phone_number
 
 
 FullName = Annotated[
@@ -31,6 +34,11 @@ class RegisterRequest(BaseModel):
     password: SecretStr = Field(min_length=8, max_length=128)
     role: Literal["tenant", "landlord"]
     business_name: BusinessName | None = None
+
+    @field_validator("phone_no")
+    @classmethod
+    def normalize_phone_no(cls, value: str) -> str:
+        return normalize_phone_number(value)
 
     @model_validator(mode="after")
     def validate_business_name_role(self) -> "RegisterRequest":

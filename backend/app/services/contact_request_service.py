@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import Literal
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models.contact_request import ContactRequest
+from app.repositories.lead_repository import LeadRepository
 from app.repositories.conversation_repository import ConversationRepository
 from app.repositories.contact_request_repository import (
     ContactRequestRepository,
@@ -31,6 +33,10 @@ class ContactRequestStateError(Exception):
     pass
 
 
+class ContactRequestDuplicateError(Exception):
+    pass
+
+
 class ContactRequestService:
     PENDING_STATUS = "pending"
     LANDLORD_DECISIONS = {"approved", "rejected"}
@@ -41,6 +47,7 @@ class ContactRequestService:
         self._requests = ContactRequestRepository(db)
         self._conversations = ConversationRepository(db)
         self._listings = ListingRepository(db)
+        self._leads = LeadRepository(db)
 
     def create_request(
         self,
@@ -64,6 +71,16 @@ class ContactRequestService:
             raise ContactRequestForbiddenError(
                 "You cannot contact your own listing.",
             )
+        if (
+            self._requests.get_pending_for_tenant_listing(
+                tenant_id,
+                listing_id,
+            )
+            is not None
+        ):
+            raise ContactRequestDuplicateError(
+                "You already have a pending enquiry for this listing.",
+            )
 
         contact_request = ContactRequest(
             listing_id=listing_id,
@@ -77,7 +94,27 @@ class ContactRequestService:
                 tenant_id,
                 listing.landlord_id,
             )
+            self._leads.ensure_for_contact_request(
+                contact_request_id=contact_request.request_id,
+                tenant_id=tenant_id,
+                landlord_id=listing.landlord_id,
+                listing_id=listing_id,
+                created_at=contact_request.requested_at or datetime.now(),
+            )
             self._db.commit()
+        except IntegrityError as exc:
+            self._db.rollback()
+            if (
+                self._requests.get_pending_for_tenant_listing(
+                    tenant_id,
+                    listing_id,
+                )
+                is not None
+            ):
+                raise ContactRequestDuplicateError(
+                    "You already have a pending enquiry for this listing.",
+                ) from exc
+            raise
         except SQLAlchemyError:
             self._db.rollback()
             raise
@@ -89,6 +126,12 @@ class ContactRequestService:
 
     def list_for_landlord(self, landlord_id: int) -> list[ContactRequest]:
         return self._requests.list_for_landlord(landlord_id)
+
+    def list_for_landlord_with_details(
+        self,
+        landlord_id: int,
+    ) -> list[tuple[ContactRequest, str, str, str, int | None]]:
+        return self._requests.list_for_landlord_with_details(landlord_id)
 
     def update_status(
         self,

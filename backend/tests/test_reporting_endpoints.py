@@ -45,6 +45,7 @@ class ReportingEndpointTests(unittest.TestCase):
             "report_id": 5,
             "listing_id": 12,
             "target_user_id": None,
+            "lead_id": None,
             "tenant_id": 7,
             "admin_id": None,
             "reason": "scam",
@@ -69,6 +70,45 @@ class ReportingEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         self.service.submit_report.assert_called_once()
         self.assertEqual(self.service.submit_report.call_args.args[0], 7)
+
+    def test_tenant_can_report_an_inaccurate_lead(self) -> None:
+        payload = self.report_payload()
+        payload.update(
+            {
+                "listing_id": None,
+                "lead_id": 22,
+                "reason": "inaccurate_info",
+            },
+        )
+        self.service.submit_report.return_value = payload
+
+        response = self.client.post(
+            "/api/v1/reports",
+            json={
+                "target": "lead",
+                "lead_id": 22,
+                "reason": "inaccurate_info",
+                "details": "The recorded lead stage is not accurate.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["lead_id"], 22)
+        self.service.submit_report.assert_called_once()
+
+    def test_lead_dispute_requires_inaccurate_info_reason(self) -> None:
+        response = self.client.post(
+            "/api/v1/reports",
+            json={
+                "target": "lead",
+                "lead_id": 22,
+                "reason": "scam",
+                "details": "The recorded lead stage is not accurate.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.service.submit_report.assert_not_called()
 
     def test_report_form_requires_details(self) -> None:
         response = self.client.post(
@@ -152,13 +192,13 @@ class ReportingEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
 
-    def test_non_tenant_cannot_submit_reports(self) -> None:
+    def test_admin_cannot_submit_user_reports(self) -> None:
         self.app.dependency_overrides.pop(tenant_dependency)
         self.app.dependency_overrides[get_current_user] = lambda: User(
             user_id=9,
         )
         roles = Mock()
-        roles.list_for_user.return_value = [Role(role_id=3, name="landlord")]
+        roles.list_for_user.return_value = [Role(role_id=3, name="admin")]
 
         from unittest.mock import patch
 
@@ -178,6 +218,51 @@ class ReportingEndpointTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.service.submit_report.assert_not_called()
+
+    def test_landlord_can_submit_user_report(self) -> None:
+        self.app.dependency_overrides.pop(tenant_dependency)
+        self.app.dependency_overrides[get_current_user] = lambda: User(
+            user_id=9,
+        )
+        self.service.submit_report.return_value = self.report_payload()
+        roles = Mock()
+        roles.list_for_user.return_value = [Role(role_id=3, name="landlord")]
+
+        from unittest.mock import patch
+
+        with patch(
+            "app.api.dependencies.RoleRepository",
+            return_value=roles,
+        ):
+            response = self.client.post(
+                "/api/v1/reports",
+                json={
+                    "target": "listing",
+                    "listing_id": 12,
+                    "reason": "unauthorized_property",
+                    "details": "The advertiser may not be authorized.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.service.submit_report.assert_called_once()
+
+    def test_admin_can_add_internal_report_note(self) -> None:
+        self.service.add_internal_note.return_value = self.report_payload(
+            status="under_review",
+        )
+
+        response = self.client.post(
+            "/api/v1/admin/reports/5/notes",
+            json={"note": "Internal investigation detail."},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.service.add_internal_note.assert_called_once_with(
+            5,
+            4,
+            "Internal investigation detail.",
+        )
 
     def test_admin_route_requires_authentication_and_admin_role(self) -> None:
         self.app.dependency_overrides.pop(admin_dependency)

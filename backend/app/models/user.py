@@ -29,3 +29,6 @@ class User(Base):
         nullable=False,
         server_default=func.now(),
     )
+    phone_verified_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP(timezone=True),
+    )

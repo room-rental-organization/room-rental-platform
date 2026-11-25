@@ -55,6 +55,29 @@ class AuthServiceTests(unittest.TestCase):
         self.db.commit.assert_called_once()
         self.db.rollback.assert_not_called()
 
+    def test_registration_normalizes_local_phone_number(self) -> None:
+        def add_user(user: User) -> User:
+            user.user_id = 42
+            return user
+
+        self.service._users.add.side_effect = add_user
+        request = RegisterRequest(
+            full_name="Test User",
+            phone_no="082 123 4567",
+            email="local.phone@example.com",
+            password="SecurePassword123",
+            role="tenant",
+        )
+
+        with patch(
+            "app.services.auth_service.hash_password",
+            return_value="argon2-hash",
+        ):
+            self.service.register(request)
+
+        registered_user = self.service._users.add.call_args.args[0]
+        self.assertEqual(registered_user.phone_no, "+27821234567")
+
     def test_register_assigns_selected_landlord_role(self) -> None:
         def add_user(user: User) -> User:
             user.user_id = 43

@@ -5,8 +5,11 @@ from sqlalchemy import (
     CheckConstraint,
     ForeignKey,
     Identity,
+    Integer,
+    Index,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ENUM, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,13 +21,29 @@ class Report(Base):
     __tablename__ = "report"
     __table_args__ = (
         CheckConstraint(
-            "listing_id IS NOT NULL OR target_user_id IS NOT NULL",
+            "(listing_id IS NOT NULL AND target_user_id IS NULL "
+            "AND lead_id IS NULL) OR "
+            "(listing_id IS NULL AND target_user_id IS NOT NULL "
+            "AND lead_id IS NULL) OR "
+            "(listing_id IS NULL AND target_user_id IS NULL "
+            "AND lead_id IS NOT NULL)",
             name="report_target_check",
+        ),
+        Index(
+            "report_one_active_lead_dispute_idx",
+            "lead_id",
+            unique=True,
+            postgresql_where=text(
+                "lead_id IS NOT NULL AND status IN ('open', 'under_review')",
+            ),
+            sqlite_where=text(
+                "lead_id IS NOT NULL AND status IN ('open', 'under_review')",
+            ),
         ),
     )
 
     report_id: Mapped[int] = mapped_column(
-        BigInteger,
+        BigInteger().with_variant(Integer, "sqlite"),
         Identity(always=True),
         primary_key=True,
     )
@@ -35,6 +54,10 @@ class Report(Base):
     target_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("users.user_id", name="report_target_user_id_fkey"),
+    )
+    lead_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("leads.lead_id", name="report_lead_id_fkey"),
     )
     tenant_id: Mapped[int] = mapped_column(
         BigInteger,
@@ -55,6 +78,11 @@ class Report(Base):
             "fake_listing",
             "inaccurate_info",
             "abusive",
+            "misleading_price",
+            "incorrect_availability",
+            "unauthorized_property",
+            "harassment",
+            "fake_account",
             "other",
             name="report_reason_enum",
             create_type=False,
@@ -85,7 +113,7 @@ class ReportHistory(Base):
     __tablename__ = "report_history"
 
     history_id: Mapped[int] = mapped_column(
-        BigInteger,
+        BigInteger().with_variant(Integer, "sqlite"),
         Identity(always=True),
         primary_key=True,
     )
@@ -112,6 +140,7 @@ class ReportHistory(Base):
             "assigned",
             "resolved",
             "dismissed",
+            "note_added",
             name="report_action_enum",
             create_type=False,
         ),

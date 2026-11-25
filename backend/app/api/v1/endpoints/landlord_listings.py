@@ -17,10 +17,15 @@ from app.api.dependencies import require_role
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.landlord_listing import (
+    ListingAvailabilityUpdate,
     ListingCreateRequest,
     ListingUpdateRequest,
 )
+from app.schemas.landlord_dashboard import LandlordBusinessDashboardResponse
 from app.schemas.listing import LandlordListingResponse
+from app.services.landlord_dashboard_service import (
+    LandlordBusinessDashboardService,
+)
 from app.services.landlord_listing_service import (
     LandlordListingService,
     ListingAmenityNotFoundError,
@@ -46,6 +51,32 @@ def get_landlord_listing_service(
     db: Session = Depends(get_db),
 ) -> LandlordListingService:
     return LandlordListingService(db)
+
+
+def get_landlord_dashboard_service(
+    db: Session = Depends(get_db),
+) -> LandlordBusinessDashboardService:
+    return LandlordBusinessDashboardService(db)
+
+
+@router.get(
+    "/users/me/business-dashboard",
+    response_model=LandlordBusinessDashboardResponse,
+)
+def get_business_dashboard(
+    current_landlord: User = Depends(landlord_dependency),
+    service: LandlordBusinessDashboardService = Depends(
+        get_landlord_dashboard_service,
+    ),
+) -> LandlordBusinessDashboardResponse:
+    try:
+        return service.get_summary(current_landlord.user_id)
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to retrieve landlord business dashboard")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Dashboard data is temporarily unavailable.",
+        ) from exc
 
 
 @router.get(
@@ -190,6 +221,40 @@ def withdraw_listing(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Listing could not be withdrawn right now.",
+        ) from exc
+
+
+@router.patch(
+    "/listings/{listing_id}/availability",
+    response_model=LandlordListingResponse,
+)
+def update_listing_availability(
+    changes: ListingAvailabilityUpdate,
+    listing_id: Annotated[int, Path(gt=0)],
+    current_landlord: User = Depends(landlord_dependency),
+    service: LandlordListingService = Depends(get_landlord_listing_service),
+) -> LandlordListingResponse:
+    try:
+        return service.update_availability(
+            current_landlord.user_id,
+            listing_id,
+            changes.availability_status,
+        )
+    except ListingNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Listing not found.",
+        ) from exc
+    except ListingStateError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except SQLAlchemyError as exc:
+        logger.exception("Failed to update availability for listing %s", listing_id)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Listing availability could not be updated right now.",
         ) from exc
 
 

@@ -1,10 +1,11 @@
 import unittest
 from unittest.mock import Mock, patch
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.models.contact_request import ContactRequest
 from app.services.contact_request_service import (
+    ContactRequestDuplicateError,
     ContactRequestForbiddenError,
     ContactRequestListingUnavailableError,
     ContactRequestNotFoundError,
@@ -18,11 +19,14 @@ class ContactRequestServiceTests(unittest.TestCase):
         self.db = Mock()
         self.service = ContactRequestService(self.db)
         self.requests = Mock()
+        self.requests.get_pending_for_tenant_listing.return_value = None
         self.service._requests = self.requests
         self.conversations = Mock()
         self.service._conversations = self.conversations
         self.service._listings = Mock()
         self.service._listings.get_by_id.return_value = Mock(landlord_id=8)
+        self.leads = Mock()
+        self.service._leads = self.leads
 
     def test_create_request_starts_pending_for_public_listing(self) -> None:
         def add_contact_request(contact_request: ContactRequest) -> None:
@@ -47,7 +51,78 @@ class ContactRequestServiceTests(unittest.TestCase):
             6,
             8,
         )
+        self.leads.ensure_for_contact_request.assert_called_once()
+        lead_kwargs = self.leads.ensure_for_contact_request.call_args.kwargs
+        self.assertEqual(
+            {
+                "contact_request_id": lead_kwargs["contact_request_id"],
+                "tenant_id": lead_kwargs["tenant_id"],
+                "landlord_id": lead_kwargs["landlord_id"],
+                "listing_id": lead_kwargs["listing_id"],
+            },
+            {
+                "contact_request_id": 5,
+                "tenant_id": 6,
+                "landlord_id": 8,
+                "listing_id": 14,
+            },
+        )
         self.db.commit.assert_called_once()
+
+    def test_create_request_rejects_an_existing_pending_request(self) -> None:
+        self.requests.get_pending_for_tenant_listing.return_value = ContactRequest(
+            request_id=5,
+            listing_id=14,
+            tenant_id=6,
+            status="pending",
+        )
+        with patch(
+            "app.services.contact_request_service.ListingService"
+        ) as listing_service:
+            listing_service.return_value.get_public_listing.return_value = (
+                object()
+            )
+
+            with self.assertRaises(ContactRequestDuplicateError):
+                self.service.create_request(tenant_id=6, listing_id=14)
+
+        self.requests.add.assert_not_called()
+        self.conversations.create_for_contact_request.assert_not_called()
+        self.leads.ensure_for_contact_request.assert_not_called()
+        self.db.commit.assert_not_called()
+
+    def test_concurrent_duplicate_request_is_mapped_after_unique_violation(
+        self,
+    ) -> None:
+        pending_request = ContactRequest(
+            request_id=5,
+            listing_id=14,
+            tenant_id=6,
+            status="pending",
+        )
+        self.requests.get_pending_for_tenant_listing.side_effect = [
+            None,
+            pending_request,
+        ]
+        self.requests.add.side_effect = IntegrityError(
+            "insert contact request",
+            {},
+            Exception("unique pending request"),
+        )
+
+        with patch(
+            "app.services.contact_request_service.ListingService"
+        ) as listing_service:
+            listing_service.return_value.get_public_listing.return_value = (
+                object()
+            )
+
+            with self.assertRaises(ContactRequestDuplicateError):
+                self.service.create_request(tenant_id=6, listing_id=14)
+
+        self.db.rollback.assert_called_once()
+        self.conversations.create_for_contact_request.assert_not_called()
+        self.leads.ensure_for_contact_request.assert_not_called()
 
     def test_create_request_rejects_landlord_own_listing(self) -> None:
         self.service._listings.get_by_id.return_value = Mock(landlord_id=6)
@@ -119,6 +194,17 @@ class ContactRequestServiceTests(unittest.TestCase):
 
         self.assertEqual(result, [contact_request])
         self.requests.list_for_landlord.assert_called_once_with(8)
+
+    def test_list_received_requests_includes_conversation_safe_details(
+        self,
+    ) -> None:
+        rows = [(ContactRequest(request_id=5), "Room", "Address", "Tenant", 9)]
+        self.requests.list_for_landlord_with_details.return_value = rows
+
+        result = self.service.list_for_landlord_with_details(8)
+
+        self.assertEqual(result, rows)
+        self.requests.list_for_landlord_with_details.assert_called_once_with(8)
 
     def test_landlord_can_approve_request_for_another_tenant(self) -> None:
         contact_request = ContactRequest(

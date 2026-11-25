@@ -15,13 +15,28 @@ _PHONE_NUMBER_PATTERN = re.compile(
     r"(?<![0-9])\+?(?:[0-9][\s()./-]*){8,}",
 )
 _E164_PATTERN = re.compile(r"^\+[1-9][0-9]{7,14}$")
+_PHONE_FORMATTING_PATTERN = re.compile(r"[\s()./-]")
 _PHONE_AAD = b"room-rental-platform:whatsapp-phone:v1"
 
 
 def normalize_phone_number(phone_number: str) -> str:
     normalized = phone_number.strip()
+    if normalized.startswith("+"):
+        normalized = "+" + _PHONE_FORMATTING_PATTERN.sub(
+            "",
+            normalized[1:],
+        )
+    else:
+        normalized = _PHONE_FORMATTING_PATTERN.sub("", normalized)
+        if re.fullmatch(r"0[0-9]{9}", normalized):
+            normalized = "+27" + normalized[1:]
+        elif re.fullmatch(r"27[0-9]{9}", normalized):
+            normalized = "+" + normalized
+
     if not _E164_PATTERN.fullmatch(normalized):
-        raise ValueError("Phone number must be in E.164 format.")
+        raise ValueError(
+            "Phone number must be E.164 or a South African local number.",
+        )
     return normalized
 
 

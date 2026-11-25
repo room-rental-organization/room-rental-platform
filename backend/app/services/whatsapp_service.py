@@ -25,6 +25,7 @@ from app.models.conversation import (
 )
 from app.models.whatsapp import WhatsAppContact, WhatsAppMessage
 from app.models.saved_search import SavedSearch
+from app.models.user import User
 from app.services.whatsapp_provider import (
     WhatsAppCloudAPI,
     WhatsAppProviderError,
@@ -113,6 +114,16 @@ class WhatsAppService:
             contact.opted_in_at = None
             contact.opted_out_at = None
 
+        user = self._db.get(User, user_id)
+        if (
+            user is not None
+            and self._matches_registered_phone(
+                user.phone_no,
+                lookup_hash,
+            )
+        ):
+            user.phone_verified_at = None
+
         self._db.execute(
             update(SavedSearch)
             .where(SavedSearch.tenant_id == user_id)
@@ -160,6 +171,15 @@ class WhatsAppService:
         contact.verified_at = now
         contact.opted_in_at = now
         contact.opted_out_at = None
+        user = self._db.get(User, user_id)
+        if (
+            user is not None
+            and self._matches_registered_phone(
+                user.phone_no,
+                contact.phone_lookup_hash,
+            )
+        ):
+            user.phone_verified_at = now
         self._commit()
 
     def unlink(self, user_id: int) -> None:
@@ -652,6 +672,20 @@ class WhatsAppService:
         except SQLAlchemyError:
             self._db.rollback()
             raise
+
+    @staticmethod
+    def _matches_registered_phone(
+        registered_phone: str,
+        phone_hash: str,
+    ) -> bool:
+        try:
+            normalized_phone = normalize_phone_number(registered_phone)
+        except ValueError:
+            return False
+        return hmac.compare_digest(
+            phone_lookup_hash(normalized_phone),
+            phone_hash,
+        )
 
     @staticmethod
     def _now() -> datetime:

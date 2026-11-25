@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.report import Report, ReportHistory
@@ -62,6 +64,25 @@ class ReportRepository:
             statement = statement.with_for_update()
         return self._db.scalar(statement)
 
+    def get_active_lead_dispute(
+        self,
+        lead_id: int,
+        *,
+        for_update: bool = False,
+    ) -> Report | None:
+        statement = (
+            select(Report)
+            .where(
+                Report.lead_id == lead_id,
+                Report.status.in_(("open", "under_review")),
+            )
+            .order_by(Report.created_at.desc(), Report.report_id.desc())
+            .limit(1)
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return self._db.scalar(statement)
+
     def list_history(self, report_id: int) -> list[ReportHistory]:
         statement = (
             select(ReportHistory)
@@ -69,3 +90,33 @@ class ReportRepository:
             .order_by(ReportHistory.created_at, ReportHistory.history_id)
         )
         return list(self._db.scalars(statement).all())
+
+    def has_recent_duplicate(
+        self,
+        tenant_id: int,
+        listing_id: int | None,
+        target_user_id: int | None,
+        reason: str,
+        since: datetime,
+        lead_id: int | None = None,
+    ) -> bool:
+        statement = select(Report.report_id).where(
+            Report.tenant_id == tenant_id,
+            Report.listing_id == listing_id,
+            Report.target_user_id == target_user_id,
+            Report.lead_id == lead_id,
+            Report.reason == reason,
+            Report.created_at >= since,
+        ).limit(1)
+        return self._db.scalar(statement) is not None
+
+    def count_submissions_since(
+        self,
+        tenant_id: int,
+        since: datetime,
+    ) -> int:
+        statement = select(func.count()).select_from(Report).where(
+            Report.tenant_id == tenant_id,
+            Report.created_at >= since,
+        )
+        return int(self._db.scalar(statement) or 0)
