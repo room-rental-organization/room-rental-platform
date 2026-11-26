@@ -1,12 +1,11 @@
+import { useResourceState } from "../queries/resources";
 import { useEffect, useState } from "react";
 import type { FormEvent, ChangeEvent } from "react";
 
 import {
   createListing,
-  getAmenities,
   getAreas,
   getReceivedContactRequests,
-  getMyListings,
   respondToContactRequest,
   submitListing,
   resolveArea,
@@ -130,18 +129,23 @@ export default function LandlordDashboardPage({
   useEffect(() => {
     setActiveView(["overview", "listings", "enquiries", "future"].includes(view) ? view : "overview");
   }, [view]);
-  const [listings, setListings] = useState<Listing[]>([]);
+  const listingsQuery = useResourceState<Listing[]>("/users/me/listings", accessToken, []);
+  const listings = listingsQuery.data;
+  const setListings = listingsQuery.setData;
+  const amenitiesQuery = useResourceState<Amenity[]>("/amenities", null, [], activeView === "listings");
+  const amenities = amenitiesQuery.data;
+  const isLoading = listingsQuery.isPending;
+
   const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
   const [areaSuggestions, setAreaSuggestions] = useState<Area[]>([]);
   const [areaSearchError, setAreaSearchError] = useState<string | null>(null);
-  const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [form, setForm] = useState<ListingFormFields>(emptyForm);
   const [mapSearchAddress, setMapSearchAddress] = useState("");
   const [editingListingId, setEditingListingId] = useState<number | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionErrorMessage, setErrorMessage] = useState<string | null>(null);
+  const errorMessage = actionErrorMessage ?? listingsQuery.error?.message ?? amenitiesQuery.error?.message ?? null;
   const [notice, setNotice] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingContactRequests, setIsLoadingContactRequests] =
     useState(true);
@@ -162,7 +166,8 @@ export default function LandlordDashboardPage({
   }
 
   async function refreshListings(): Promise<void> {
-    setListings(await getMyListings(accessToken));
+    const result = await listingsQuery.refetch({ cancelRefetch: false });
+    if (result.error) throw result.error;
   }
 
   useEffect(() => {
@@ -194,36 +199,6 @@ export default function LandlordDashboardPage({
       window.clearTimeout(timeout);
     };
   }, [form.areaName]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadDashboard(): Promise<void> {
-      try {
-        const [myListings, availableAmenities] = await Promise.all([
-          getMyListings(accessToken),
-          getAmenities(),
-        ]);
-        if (active) {
-          setListings(myListings);
-          setAmenities(availableAmenities);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (active) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadDashboard();
-    return () => {
-      active = false;
-    };
-  }, [accessToken]);
 
   useEffect(() => {
     let active = true;
@@ -622,7 +597,7 @@ export default function LandlordDashboardPage({
           </p>
         )}
 
-        {activeView === "overview" && !isLoading && <BusinessPanel token={accessToken} listings={listings} key={listings.map((listing) => `${listing.listing_id}-${listing.availability_status}`).join(",")} />}
+        {activeView === "overview" && !isLoading && <BusinessPanel token={accessToken} listings={listings} />}
 
         {activeView === "overview" && !isLoading && (
           <RentalInterestNotificationsPanel
@@ -1005,18 +980,8 @@ export default function LandlordDashboardPage({
               className="secondary-button"
               disabled={isLoading}
               onClick={() => {
-                setIsLoading(true);
-                void Promise.all([
-                  refreshListings(),
-                  getAmenities(),
-                ])
-                  .then(([, availableAmenities]) => {
-                    setAmenities(availableAmenities);
-                  })
-                  .catch((error: unknown) =>
-                    setErrorMessage(getErrorMessage(error)),
-                  )
-                  .finally(() => setIsLoading(false));
+                void Promise.all([refreshListings(), amenitiesQuery.refetch({ cancelRefetch: false })])
+                  .catch((error: unknown) => setErrorMessage(getErrorMessage(error)));
               }}
               type="button"
             >

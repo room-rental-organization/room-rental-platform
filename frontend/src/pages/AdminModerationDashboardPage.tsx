@@ -1,10 +1,9 @@
+import { useResourceState } from "../queries/resources";
 import { useEffect, useRef, useState } from "react";
 
 import {
   approveListing,
   getListingModerationHistory,
-  getPendingListings,
-  getPublishedListings,
   hideListing,
   rejectListing,
   type UserProfile,
@@ -50,8 +49,11 @@ export default function AdminModerationDashboardPage({
 }: AdminModerationDashboardPageProps) {
   const [selectedListingId, setSelectedListingId] = useState<number | null>(null);
   const reviewDialog = useRef<HTMLDialogElement>(null);
-  const [pendingListings, setPendingListings] = useState<Listing[]>([]);
-  const [publishedListings, setPublishedListings] = useState<Listing[]>([]);
+  const pendingQuery = useResourceState<Listing[]>("/admin/listings/pending", accessToken, []);
+  const publishedQuery = useResourceState<Listing[]>("/admin/listings/published", accessToken, []);
+  const pendingListings = pendingQuery.data;
+  const publishedListings = publishedQuery.data;
+  const isLoading = pendingQuery.isPending || publishedQuery.isPending;
   const [listingView, setListingView] = useState<"pending" | "published">(
     "pending",
   );
@@ -63,9 +65,9 @@ export default function AdminModerationDashboardPage({
   const [expandedHistory, setExpandedHistory] = useState<number[]>([]);
   const [busyListingId, setBusyListingId] = useState<number | null>(null);
   const [historyLoadingId, setHistoryLoadingId] = useState<number | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [actionErrorMessage, setErrorMessage] = useState<string | null>(null);
+  const errorMessage = actionErrorMessage ?? pendingQuery.error?.message ?? publishedQuery.error?.message ?? null;
   const [notice, setNotice] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const selectedListing = [...pendingListings, ...publishedListings].find(
     item => item.listing_id === selectedListingId,
   );
@@ -89,43 +91,9 @@ export default function AdminModerationDashboardPage({
   );
 
   async function refreshListings(): Promise<void> {
-    const [pending, published] = await Promise.all([
-      getPendingListings(accessToken),
-      getPublishedListings(accessToken),
-    ]);
-    setPendingListings(pending);
-    setPublishedListings(published);
+    const results = await Promise.all([pendingQuery.refetch({ cancelRefetch: false }), publishedQuery.refetch({ cancelRefetch: false })]);
+    for (const result of results) if (result.error) throw result.error;
   }
-
-  useEffect(() => {
-    let active = true;
-
-    async function loadDashboard(): Promise<void> {
-      try {
-        const [pending, published] = await Promise.all([
-          getPendingListings(accessToken),
-          getPublishedListings(accessToken),
-        ]);
-        if (active) {
-          setPendingListings(pending);
-          setPublishedListings(published);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setErrorMessage(getErrorMessage(error));
-        }
-      } finally {
-        if (active) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    void loadDashboard();
-    return () => {
-      active = false;
-    };
-  }, [accessToken]);
 
   async function runAction(
     listingId: number,

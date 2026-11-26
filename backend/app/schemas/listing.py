@@ -14,7 +14,9 @@ class ListingPhotoResponse(BaseModel):
 
 
 class ListingResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    # Accept field names when revalidating serialized public responses as well
+    # as ORM-only aliases (area.name and amenity_names).
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     listing_id: int
     area_id: int

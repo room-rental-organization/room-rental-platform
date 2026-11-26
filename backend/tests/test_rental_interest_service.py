@@ -119,6 +119,7 @@ class RentalInterestServiceTests(unittest.TestCase):
         )
 
     def test_public_opportunity_includes_registration_capacity(self) -> None:
+        self.service._interests.registered_counts.side_effect = [{31: 1}, {31: 3}]
         self.service._interests.list_public_opportunities.return_value = [
             self.opportunity,
         ]
@@ -138,6 +139,7 @@ class RentalInterestServiceTests(unittest.TestCase):
     def test_landlord_opportunities_use_the_opportunity_repository_query(
         self,
     ) -> None:
+        self.service._interests.registered_counts.side_effect = [{31: 0}, {31: 0}]
         self.service._interests.list_opportunities_for_landlord.return_value = [
             self.opportunity,
         ]

@@ -104,8 +104,10 @@ class RentalInterestService:
             settings.rental_interest_max_submissions_per_day
         )
 
-    def list_public_opportunities(self) -> list[InterestOpportunityResponse]:
-        opportunities = self._interests.list_public_opportunities()
+    def list_public_opportunities(self, listing_id: int | None = None) -> list[InterestOpportunityResponse]:
+        opportunities = self._interests.list_public_opportunities(listing_id)
+        counts = self._interests.registered_counts([item.opportunity_id for item in opportunities])
+        wait_counts = self._interests.registered_counts([item.opportunity_id for item in opportunities], ('waitlisted',))
         latest_decisions = self._listings.get_latest_moderation_decisions(
             [opportunity.listing_id for opportunity in opportunities],
         )
@@ -121,7 +123,9 @@ class RentalInterestService:
                 continue
             seen_listing_ids.add(opportunity.listing_id)
             responses.append(
-                self._opportunity_response(opportunity, eligible=True),
+                self._opportunity_response(opportunity, eligible=True,
+                                           active_count=counts.get(opportunity.opportunity_id, 0),
+                                           wait_count=wait_counts.get(opportunity.opportunity_id, 0)),
             )
         return responses
 
@@ -135,9 +139,13 @@ class RentalInterestService:
         latest_decisions = self._listings.get_latest_moderation_decisions(
             [opportunity.listing_id for opportunity in opportunities],
         )
+        counts = self._interests.registered_counts([item.opportunity_id for item in opportunities])
+        wait_counts = self._interests.registered_counts([item.opportunity_id for item in opportunities], ('waitlisted',))
         return [
             self._opportunity_response(
                 opportunity,
+                active_count=counts.get(opportunity.opportunity_id, 0),
+                wait_count=wait_counts.get(opportunity.opportunity_id, 0),
                 eligible=self._is_eligible_listing(
                     opportunity.listing,
                     latest_decisions.get(opportunity.listing_id),
@@ -946,8 +954,10 @@ class RentalInterestService:
         opportunity: RentalInterestOpportunity,
         *,
         eligible: bool,
+        active_count: int | None = None,
+        wait_count: int | None = None,
     ) -> InterestOpportunityResponse:
-        active_registration_count = self._interests.count_registered(
+        active_registration_count = active_count if active_count is not None else self._interests.count_registered(
             opportunity.opportunity_id,
         )
         if (
@@ -969,7 +979,7 @@ class RentalInterestService:
             availability_status=availability_status,
             max_active_registrations=opportunity.max_active_registrations,
             active_registration_count=active_registration_count,
-            waitlist_count=self._interests.count_status(
+            waitlist_count=wait_count if wait_count is not None else self._interests.count_status(
                 opportunity.opportunity_id,
                 (self.WAITLISTED_STATUS,),
             ),

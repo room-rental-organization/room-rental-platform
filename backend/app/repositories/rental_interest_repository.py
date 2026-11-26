@@ -90,7 +90,7 @@ class RentalInterestRepository:
             )
         return self._db.scalar(statement)
 
-    def list_public_opportunities(self) -> list[RentalInterestOpportunity]:
+    def list_public_opportunities(self, listing_id: int | None = None) -> list[RentalInterestOpportunity]:
         statement = (
             select(RentalInterestOpportunity)
             .options(
@@ -104,6 +104,8 @@ class RentalInterestRepository:
                 RentalInterestOpportunity.opportunity_id.desc(),
             )
         )
+        if listing_id is not None:
+            statement = statement.where(RentalInterestOpportunity.listing_id == listing_id).limit(1)
         return list(self._db.scalars(statement).unique().all())
 
     def list_open_opportunities(self) -> list[RentalInterestOpportunity]:
@@ -198,6 +200,15 @@ class RentalInterestRepository:
         opportunity_id: int,
     ) -> int:
         return self.count_status(opportunity_id, ACTIVE_REGISTRATION_STATUSES)
+
+    def registered_counts(self, opportunity_ids: list[int], statuses=ACTIVE_REGISTRATION_STATUSES) -> dict[int, int]:
+        if not opportunity_ids:
+            return {}
+        statement = select(RentalInterest.opportunity_id, func.count()).where(
+            RentalInterest.opportunity_id.in_(opportunity_ids),
+            RentalInterest.status.in_(statuses),
+        ).group_by(RentalInterest.opportunity_id)
+        return dict(self._db.execute(statement).all())
 
     def list_waitlisted(
         self,

@@ -27,8 +27,10 @@ class LandlordBusinessDashboardService:
         *,
         today: date | None = None,
     ) -> LandlordBusinessDashboardResponse:
-        listings = self._listings.list_for_landlord(landlord_id)
-        requests = self._requests.list_for_landlord(landlord_id)
+        listings = self._listings.dashboard_rows(landlord_id)
+        # Scalar projections avoid loading room descriptions, photos and amenities
+        # through ContactRequest.listing just to count enquiries.
+        requests = self._requests.dashboard_rows(landlord_id)
         active_listing_ids = [
             listing.listing_id
             for listing in listings

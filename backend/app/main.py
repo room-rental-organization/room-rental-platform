@@ -1,4 +1,6 @@
 import logging
+from time import perf_counter
+from app.core.query_metrics import QueryCount, request_queries
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
@@ -27,10 +29,26 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 app.include_router(api_router)
+
+
+@app.middleware('http')
+async def log_request_queries(request: Request, call_next):
+    counts = QueryCount()
+    token = request_queries.set(counts)
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+        route = request.scope.get('route')
+        logger.info('api_performance route=%s method=%s status=%d selects=%d statements=%d duration_ms=%.1f',
+                    getattr(route, 'path', 'unmatched'), request.method, response.status_code,
+                    counts.selects, counts.statements, (perf_counter() - started) * 1000)
+        return response
+    finally:
+        request_queries.reset(token)
 
 
 @app.exception_handler(RequestValidationError)

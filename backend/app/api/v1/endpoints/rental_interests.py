@@ -60,10 +60,11 @@ def get_rental_interest_service(
     response_model=list[InterestOpportunityResponse],
 )
 def list_public_interest_opportunities(
+    listing_id: int | None = Query(default=None, gt=0),
     service: RentalInterestService = Depends(get_rental_interest_service),
 ) -> list[InterestOpportunityResponse]:
     try:
-        return service.list_public_opportunities()
+        return service.list_public_opportunities() if listing_id is None else service.list_public_opportunities(listing_id)
     except SQLAlchemyError as exc:
         logger.exception("Failed to retrieve public interest opportunities")
         raise HTTPException(

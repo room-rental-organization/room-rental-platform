@@ -1,8 +1,8 @@
+import { useRoomDetails } from "../queries/resources";
 import { useEffect, useState } from "react";
 
 import {
   ApiError,
-  buildApiUrl,
   createContactRequest,
   deleteSavedListing,
   getAmenities,
@@ -18,7 +18,6 @@ import {
 import AppLink from "../components/AppLink";
 import RentalInterestRegistrationForm from "../components/RentalInterestRegistrationForm";
 import RoomMap from "../components/RoomMap";
-import type { Listing } from "../components/ListingCard";
 import type { Amenity } from "../types/listing";
 
 type ListingDetailsPageProps = {
@@ -33,54 +32,6 @@ type ListingDetailsPageProps = {
   sessionNotice: string | null;
   sessionRestoreError: string | null;
 };
-
-function isListing(value: unknown): value is Listing {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const listing = value as Record<string, unknown>;
-
-  return (
-    typeof listing.listing_id === "number" &&
-    typeof listing.area_id === "number" &&
-    (listing.area_name === undefined ||
-      listing.area_name === null ||
-      typeof listing.area_name === "string") &&
-    typeof listing.title === "string" &&
-    typeof listing.description === "string" &&
-    typeof listing.room_type === "string" &&
-    (typeof listing.monthly_rent === "string" ||
-      typeof listing.monthly_rent === "number") &&
-    (typeof listing.deposit_amount === "string" ||
-      typeof listing.deposit_amount === "number") &&
-    typeof listing.address === "string" &&
-    typeof listing.date_available === "string" &&
-    typeof listing.status === "string" &&
-    typeof listing.created_at === "string" &&
-    (listing.has_map_location === undefined ||
-      typeof listing.has_map_location === "boolean") &&
-    (listing.approximate_latitude === undefined ||
-      listing.approximate_latitude === null ||
-      (typeof listing.approximate_latitude === "number" &&
-        Number.isFinite(listing.approximate_latitude))) &&
-    (listing.approximate_longitude === undefined ||
-      listing.approximate_longitude === null ||
-      (typeof listing.approximate_longitude === "number" &&
-        Number.isFinite(listing.approximate_longitude))) &&
-    Array.isArray(listing.amenities) &&
-    listing.amenities.every((amenity) => typeof amenity === "string") &&
-    Array.isArray(listing.photos) &&
-    listing.photos.every(
-      (photo) =>
-        typeof photo === "object" &&
-        photo !== null &&
-        typeof photo.photo_id === "number" &&
-        typeof photo.url === "string" &&
-        typeof photo.uploaded_at === "string",
-    )
-  );
-}
 
 function formatCurrency(value: string | number): string {
   const amount = Number(value);
@@ -134,15 +85,17 @@ export default function ListingDetailsPage({
   sessionNotice,
   sessionRestoreError,
 }: ListingDetailsPageProps) {
-  const [listing, setListing] = useState<Listing | null>(null);
+  const detailQuery = useRoomDetails(listingId);
+  const listing = detailQuery.data ?? null;
   const [publicMapPoint, setPublicMapPoint] = useState<{
     latitude: number;
     longitude: number;
   } | null>(null);
   const [mapLocationError, setMapLocationError] = useState<string | null>(null);
   const [isLoadingMapLocation, setIsLoadingMapLocation] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const error = detailQuery.error instanceof ApiError && detailQuery.error.statusCode === 404
+    ? "This room could not be found or is no longer available." : detailQuery.error?.message ?? null;
+  const isLoading = detailQuery.isPending;
   const [contactRequestError, setContactRequestError] = useState<string | null>(
     null,
   );
@@ -246,93 +199,27 @@ export default function ListingDetailsPage({
   }
 
   useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadListing(): Promise<void> {
-      setPublicMapPoint(null);
-      setMapLocationError(null);
-      setIsLoadingMapLocation(false);
-      try {
-        const response = await fetch(
-          buildApiUrl(`/api/v1/listings/${listingId}`),
-          {
-            signal: controller.signal,
-          },
-        );
-        if (response.status === 404) {
-          setError("This room could not be found or is no longer available.");
-          return;
-        }
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
-        }
-
-        const payload: unknown = await response.json();
-        if (!isListing(payload)) {
-          throw new Error("The listing response has an unexpected format.");
-        }
-
-        setListing(payload);
-        if (
-          typeof payload.approximate_latitude === "number" &&
-          typeof payload.approximate_longitude === "number"
-        ) {
-          setPublicMapPoint({
-            latitude: payload.approximate_latitude,
-            longitude: payload.approximate_longitude,
-          });
-        } else if (payload.has_map_location === true) {
-          setIsLoadingMapLocation(true);
-          try {
-            const location = await getPublicListingMapLocation(
-              listingId,
-              controller.signal,
-            );
-            setPublicMapPoint({
-              latitude: location.approximate_latitude,
-              longitude: location.approximate_longitude,
-            });
-          } catch (locationError: unknown) {
-            if (!controller.signal.aborted) {
-              if (
-                locationError instanceof ApiError &&
-                locationError.statusCode === 404
-              ) {
-                setMapLocationError(null);
-              } else {
-                setMapLocationError(
-                  locationError instanceof Error
-                    ? locationError.message
-                    : "The map location could not be loaded.",
-                );
-              }
-            }
-          } finally {
-            if (!controller.signal.aborted) {
-              setIsLoadingMapLocation(false);
-            }
-          }
-        }
-      } catch (requestError) {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Listing details could not be loaded.",
-        );
-      } finally {
-        if (!controller.signal.aborted) {
-          setIsLoading(false);
-        }
-      }
+    setPublicMapPoint(null);
+    setMapLocationError(null);
+    setIsLoadingMapLocation(false);
+    if (!listing) return;
+    if (typeof listing.approximate_latitude === "number" && typeof listing.approximate_longitude === "number") {
+      setPublicMapPoint({ latitude: listing.approximate_latitude, longitude: listing.approximate_longitude });
+      return;
     }
-
-    void loadListing();
+    if (!listing.has_map_location) return;
+    const controller = new AbortController();
+    setIsLoadingMapLocation(true);
+    getPublicListingMapLocation(listingId, controller.signal).then(location => {
+      if (!controller.signal.aborted) setPublicMapPoint({ latitude: location.approximate_latitude,
+        longitude: location.approximate_longitude });
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted && !(reason instanceof ApiError && reason.statusCode === 404)) {
+        setMapLocationError(reason instanceof Error ? reason.message : "The map location could not be loaded.");
+      }
+    }).finally(() => { if (!controller.signal.aborted) setIsLoadingMapLocation(false); });
     return () => controller.abort();
-  }, [listingId]);
+  }, [listingId, listing]);
 
   useEffect(() => {
     let active = true;
@@ -344,7 +231,7 @@ export default function ListingDetailsPage({
     setInterestPreferences([]);
     setInterestPreferencesError(null);
 
-    getPublicInterestOpportunities()
+    getPublicInterestOpportunities(listingId)
       .then((opportunities) => {
         if (active) {
           setInterestOpportunity(

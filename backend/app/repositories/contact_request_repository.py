@@ -11,6 +11,12 @@ class ContactRequestRepository:
     def __init__(self, db: Session) -> None:
         self._db = db
 
+    def dashboard_rows(self, landlord_id: int):
+        return self._db.execute(select(
+            ContactRequest.listing_id, ContactRequest.status, ContactRequest.requested_at,
+        ).join(Listing, Listing.listing_id == ContactRequest.listing_id)
+          .where(Listing.landlord_id == landlord_id)).all()
+
     def add(self, contact_request: ContactRequest) -> ContactRequest:
         self._db.add(contact_request)
         self._db.flush()

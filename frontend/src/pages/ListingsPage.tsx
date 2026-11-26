@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useDebouncedValue, usePublicListings, useResource } from "../queries/resources";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildApiUrl,
   createSavedSearch,
   getPublicListingMapLocation,
-  getAmenities,
   type SavedSearchCreateRequest,
   type SavedSearchRoomType,
 } from "../api";
@@ -63,26 +63,6 @@ function isListing(value: unknown): value is Listing {
         typeof photo.url === "string" &&
         typeof photo.uploaded_at === "string",
     )
-  );
-}
-
-function isArea(value: unknown): value is Area {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const area = value as Record<string, unknown>;
-  return typeof area.area_id === "number" && typeof area.name === "string";
-}
-
-function isAmenity(value: unknown): value is Amenity {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const amenity = value as Record<string, unknown>;
-  return (
-    typeof amenity.amenity_id === "number" &&
-    typeof amenity.name === "string"
   );
 }
 
@@ -150,10 +130,9 @@ export default function ListingsPage({
   sessionNotice,
   sessionRestoreError,
 }: ListingsPageProps) {
-  const [listings, setListings] = useState<Listing[]>([]);
+  const [radiusListings, setRadiusListings] = useState<Listing[]>([]);
   const [resultsView, setResultsView] = useState<"list" | "map">("list");
-  const [areas, setAreas] = useState<Area[]>([]);
-  const [amenities, setAmenities] = useState<Amenity[]>([]);
+
   const [filters, setFilters] = useState<ListingFilters>(() =>
     getFiltersFromSearch(window.location.search),
   );
@@ -176,8 +155,7 @@ export default function ListingsPage({
   const mapLocationAttemptedIds = useRef(new Set<number>());
   const [isLoadingMapLocations, setIsLoadingMapLocations] = useState(false);
   const [mapLocationError, setMapLocationError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+
   const [reloadKey, setReloadKey] = useState(0);
   const [isSavingSearch, setIsSavingSearch] = useState(false);
   const [enableWhatsAppAlerts, setEnableWhatsAppAlerts] = useState(false);
@@ -186,88 +164,29 @@ export default function ListingsPage({
     null,
   );
 
-  const loadListings = useCallback(async (signal: AbortSignal) => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const [listingsResponse, areasResponse, amenitiesPayload] = await Promise.all([
-        fetch(buildApiUrl("/api/v1/listings"), { signal }),
-        fetch(buildApiUrl("/api/v1/areas"), { signal }),
-        getAmenities(signal),
-      ]);
-      if (!listingsResponse.ok) {
-        throw new Error(
-          `Listings request failed with status ${listingsResponse.status}`,
-        );
-      }
-      if (!areasResponse.ok) {
-        throw new Error(
-          `Areas request failed with status ${areasResponse.status}`,
-        );
-      }
-      const [listingsPayload, areasPayload]: [unknown, unknown] =
-        await Promise.all([listingsResponse.json(), areasResponse.json()]);
-      if (!Array.isArray(listingsPayload) || !listingsPayload.every(isListing)) {
-        throw new Error("The listings response has an unexpected format.");
-      }
-      if (!Array.isArray(areasPayload) || !areasPayload.every(isArea)) {
-        throw new Error("The areas response has an unexpected format.");
-      }
-      if (
-        !Array.isArray(amenitiesPayload) ||
-        !amenitiesPayload.every(isAmenity)
-      ) {
-        throw new Error("The amenities response has an unexpected format.");
-      }
-
-      setListings(listingsPayload);
-      setAreas(areasPayload);
-      setAmenities(amenitiesPayload);
-      setListingMapLocations(
-        new Map(
-          listingsPayload.flatMap((listing) =>
-            typeof listing.approximate_latitude === "number" &&
-            Number.isFinite(listing.approximate_latitude) &&
-            typeof listing.approximate_longitude === "number" &&
-            Number.isFinite(listing.approximate_longitude)
-              ? [
-                  [
-                    listing.listing_id,
-                    {
-                      latitude: listing.approximate_latitude,
-                      longitude: listing.approximate_longitude,
-                    },
-                  ] as const,
-                ]
-              : [],
-          ),
-        ),
-      );
-      setMapLocationError(null);
-    } catch (requestError) {
-      if (signal.aborted) {
-        return;
-      }
-
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Listings could not be loaded.",
-      );
-    } finally {
-      if (!signal.aborted) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void loadListings(controller.signal);
-
-    return () => controller.abort();
-  }, [loadListings, reloadKey]);
+  const debouncedSearch = useDebouncedValue(JSON.stringify({ filters, availableBy }));
+  const params = useMemo(() => {
+    const state = JSON.parse(debouncedSearch) as { filters: ListingFilters; availableBy: string };
+    const query = new URLSearchParams({ sort: "recent" });
+    if (state.filters.location.trim()) query.set("search", state.filters.location.trim().toLowerCase());
+    if (state.filters.roomType) query.set("room_type", state.filters.roomType);
+    if (state.filters.minimumRent) query.set("minimum_rent", state.filters.minimumRent);
+    if (state.filters.maximumRent) query.set("maximum_rent", state.filters.maximumRent);
+    if (state.availableBy) query.set("available_by", state.availableBy);
+    [...state.filters.amenities].sort().forEach(name => query.append("amenity", name));
+    return query.toString();
+  }, [debouncedSearch]);
+  const listingQuery = usePublicListings(params, searchCenter === null);
+  const areaQuery = useResource<Area[]>("/areas");
+  const amenityQuery = useResource<Amenity[]>("/amenities");
+  const areas = areaQuery.data ?? [];
+  const amenities = amenityQuery.data ?? [];
+  const listings = useMemo(() => searchCenter ? radiusListings :
+    [...new Map((listingQuery.data?.pages.flatMap(page => page.items) ?? [])
+      .map(listing => [listing.listing_id, listing])).values()],
+    [searchCenter, radiusListings, listingQuery.data]);
+  const isLoading = searchCenter === null && listingQuery.isPending;
+  const error = listingQuery.error?.message ?? areaQuery.error?.message ?? amenityQuery.error?.message ?? null;
 
   useEffect(() => {
     if (searchCenter === null) {
@@ -312,6 +231,7 @@ export default function ListingsPage({
         if (controller.signal.aborted) {
           return;
         }
+        setRadiusListings(payload);
         setRadiusMatchedListingIds(
           new Set(payload.map((listing) => listing.listing_id)),
         );
@@ -347,8 +267,8 @@ export default function ListingsPage({
       }
     }
 
-    void searchWithinRadius();
-    return () => controller.abort();
+    const timer = window.setTimeout(() => void searchWithinRadius(), 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
   }, [radius, radiusSearchRetryKey, searchCenter]);
 
   useEffect(() => {
@@ -356,6 +276,9 @@ export default function ListingsPage({
   }, [reloadKey]);
 
   const filteredListings = useMemo(() => {
+    // Paginated results are already filtered by SQL. Applying a second filter to
+    // one page would hide matches and disagree with the backend's text search.
+    if (searchCenter === null) return listings;
     const locationQuery = filters.location.trim().toLocaleLowerCase();
     const roomTypeQuery = filters.roomType.trim().toLocaleLowerCase();
     const minimumRent =
@@ -534,7 +457,9 @@ export default function ListingsPage({
   const mapListings = useMemo(
     () =>
       filteredListings.flatMap((listing): ListingMapPoint[] => {
-        const coordinates = listingMapLocations.get(listing.listing_id);
+        const coordinates = listingMapLocations.get(listing.listing_id) ?? (
+          typeof listing.approximate_latitude === "number" && typeof listing.approximate_longitude === "number"
+            ? { latitude: listing.approximate_latitude, longitude: listing.approximate_longitude } : undefined);
         return coordinates === undefined
           ? []
           : [
@@ -792,7 +717,7 @@ export default function ListingsPage({
               We couldn’t load rooms right now. {error}
             </p>
             <button
-              onClick={() => setReloadKey((key) => key + 1)}
+              onClick={() => { setReloadKey((key) => key + 1); void listingQuery.refetch(); }}
               style={{
                 background: "#244b35",
                 border: 0,
@@ -965,6 +890,11 @@ export default function ListingsPage({
               listings={filteredListings}
               onNavigate={onNavigate}
             />
+            {searchCenter === null && listingQuery.hasNextPage && <button type="button"
+              className="secondary-button" disabled={listingQuery.isFetchingNextPage}
+              onClick={() => void listingQuery.fetchNextPage()}>
+              {listingQuery.isFetchingNextPage ? "Loading more rooms..." : "Load more rooms"}
+            </button>}
           </>
         )}
       <footer className="marketplace-footer"><span className="modern-brand"><span>R</span> Room Rentals</span><p>Find a place for your next chapter.</p><AppLink href="/register" onNavigate={onNavigate}>Have a room to rent? Get started &rarr;</AppLink></footer>

@@ -1,35 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { rentalRequest } from "./api";
+import { useState, type ReactNode } from "react";
+import { useResource } from "../../queries/resources";
+import { useMutation } from "@tanstack/react-query";
 import "./rentals.css";
 
 export function useRentalData<T>(path: string, token: string | null) {
-  const [data, setData] = useState<T | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [revision, setRevision] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    setData(null);
-    rentalRequest<T>(path, token, "GET", undefined, controller.signal)
-      .then((result) => {
-        if (!controller.signal.aborted) setData(result);
-      })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted) setError(message(reason));
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [path, token, revision]);
-  return {
-    data,
-    error,
-    loading,
-    reload: () => setRevision((value) => value + 1),
-  };
+  const query = useResource<T>(path, token);
+  return { data: query.data ?? null, error: query.error ? message(query.error) : null,
+    loading: query.isPending, reload: () => { void query.refetch({ cancelRefetch: false }); } };
 }
 export function message(error: unknown): string {
   return error instanceof Error
@@ -37,7 +14,8 @@ export function message(error: unknown): string {
     : "This request could not be completed. Please try again.";
 }
 export function useRentalAction() {
-  const [busy, setBusy] = useState(false);
+  const mutation = useMutation({ mutationFn: (action: () => Promise<unknown>) => action() });
+  const busy = mutation.isPending;
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   async function run(
@@ -45,19 +23,16 @@ export function useRentalAction() {
     success: string,
     after?: () => void,
   ): Promise<boolean> {
-    setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      await action();
+      await mutation.mutateAsync(action);
       setNotice(success);
       after?.();
       return true;
     } catch (reason: unknown) {
       setError(message(reason));
       return false;
-    } finally {
-      setBusy(false);
     }
   }
   return { busy, error, notice, run };

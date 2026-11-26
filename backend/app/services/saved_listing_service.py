@@ -23,12 +23,9 @@ class SavedListingService:
         tenant_id: int,
     ) -> list[PublicListingResponse]:
         saved = self._saved_listings.list_for_tenant(tenant_id)
-        listings = []
-        for item in saved:
-            listing = self._listings.get_public_listing(item.listing_id)
-            if listing is not None:
-                listings.append(listing)
-        return listings
+        rows = ListingRepository(self._db).public_by_ids([item.listing_id for item in saved])
+        by_id = {row.listing_id: self._listings._to_public_response(row) for row in rows}
+        return [by_id[item.listing_id] for item in saved if item.listing_id in by_id]
 
     def is_saved(self, tenant_id: int, listing_id: int) -> bool:
         return (

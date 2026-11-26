@@ -1,3 +1,4 @@
+import { setQuerySession } from "./queryClient";
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
@@ -118,6 +119,7 @@ function App() {
         const restoredProfile = await getMyProfile(savedToken);
         getDashboardRole(restoredProfile.roles);
         if (isCurrent) {
+          setQuerySession(savedToken);
           setAccessToken(savedToken);
           setProfile(restoredProfile);
         }
@@ -255,6 +257,7 @@ function App() {
         AUTH_TOKEN_STORAGE_KEY,
         tokenResponse.access_token,
       );
+      setQuerySession(tokenResponse.access_token);
       setAccessToken(tokenResponse.access_token);
       setProfile(currentProfile);
       setFields(emptyForm);
@@ -287,6 +290,7 @@ function App() {
         "The saved session could not be cleared from this tab. Close this tab to discard it.";
     }
 
+    setQuerySession(null);
     setAccessToken(null);
     setProfile(null);
     setFields(emptyForm);

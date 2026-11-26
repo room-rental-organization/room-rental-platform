@@ -1,4 +1,7 @@
 import logging
+from datetime import date
+from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,6 +13,9 @@ from app.schemas.listing import PublicListingResponse
 from app.schemas.location import PublicListingLocationResponse
 from app.services.google_places import GooglePlacesError
 from app.services.listing_service import ListingService
+from app.schemas.public_listing_page import PublicListingPage
+from app.services.public_listing_reads import PublicListingReads, PublicReadService
+from app.services.public_cache import get_public_cache
 
 
 logger = logging.getLogger(__name__)
@@ -18,7 +24,33 @@ router = APIRouter(prefix="/listings", tags=["listings"])
 
 
 def get_listing_service(db: Session = Depends(get_db)) -> ListingService:
-    return ListingService(ListingRepository(db))
+    # Only HTTP public reads receive this adapter. Business services stay uncached.
+    return PublicReadService(ListingRepository(db), get_public_cache())
+
+
+@router.get('/search', response_model=PublicListingPage)
+def search_public_listings(
+    offset: int = Query(default=0, ge=0, le=100000),
+    limit: int = Query(default=8, ge=1, le=50),
+    search: str = Query(default='', max_length=150),
+    room_type: Literal['', 'single_room', 'shared_room', 'bachelor_flat', 'self_contained'] = '',
+    minimum_rent: Decimal | None = Query(default=None, ge=0, le=99999999),
+    maximum_rent: Decimal | None = Query(default=None, ge=0, le=99999999),
+    amenity: list[str] = Query(default=[], max_length=50),
+    available_by: date | None = None,
+    sort: Literal['recent', 'rent_asc'] = 'recent',
+    db: Session = Depends(get_db),
+) -> PublicListingPage:
+    if minimum_rent is not None and maximum_rent is not None and minimum_rent > maximum_rent:
+        raise HTTPException(status_code=422, detail='Minimum rent must not exceed maximum rent.')
+    try:
+        return PublicListingReads(ListingRepository(db), get_public_cache()).page(
+            offset=offset, limit=limit, search=search.strip().lower(), room_type=room_type,
+            minimum_rent=minimum_rent, maximum_rent=maximum_rent,
+            amenities=tuple(sorted(set(amenity))), available_by=available_by, sort=sort)
+    except SQLAlchemyError as exc:
+        logger.error('Public listing page query failed')
+        raise HTTPException(status_code=503, detail='Listing data is temporarily unavailable.') from exc
 
 
 @router.get("", response_model=list[PublicListingResponse])

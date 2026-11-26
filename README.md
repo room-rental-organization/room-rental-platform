@@ -74,3 +74,53 @@ Wait for PostgreSQL to accept connections before seeding. Use a fresh disposable
 Pushing `feature/authentication` triggers Azure deployment. Local builds and tests do not deploy the application or confirm the Google Maps key's production referrer restrictions.
 
 The active workflows deploy the frontend to Azure Static Web Apps and the backend to `room-rental-api`. The obsolete `room-rental` deployment is retained in `.github/archived-workflows/`; it is outside GitHub Actions' active workflow directory and does not run on pushes.
+
+## Listing data and caching
+
+The landing page and its Explore/list/map views share a TanStack Query infinite query. `GET /api/v1/listings/search` returns eight recent approved, active, available rooms initially, then explicit pages through **Load more rooms**. Search, rent, room type, amenities and availability filters run in SQL before pagination. Supported sorting is `recent` or `rent_asc`; ties use listing ID. `limit` is bounded at 50 and `offset` at 100000. Offset pages may shift under concurrent writes; refreshing reloads them, and the frontend removes duplicate IDs. Card responses contain a description preview and one cover photo. Full details use their own query and schema; a partial card never populates the detail cache.
+
+Frontend freshness/retention defaults:
+
+| Resource | Fresh for | Retained while inactive |
+| --- | --- | --- |
+| Public listing pages | 60 seconds | 15 minutes |
+| Room detail | 30 seconds | 10 minutes |
+| Areas and amenities | 30 minutes | 60 minutes |
+| Private resources | 30 seconds | 5 minutes |
+
+Window-focus refetching is disabled. Freshness expiration does not itself start a timer-driven request; stale queries refresh when observed again or explicitly refreshed/invalidated. Search changes debounce for 350 ms and radius selection for 300 ms. List/map switches, filter-panel expansion and map panning do not fetch the listing collection. The map shows the loaded result pages. There is no viewport request to debounce. Place-ID-only locations still use the existing provider lookup with approximate coordinates and `no-store`; no Google coordinates are persisted or added to the server response cache. Radius search remains the compatibility path and can still involve provider lookups across eligible rooms.
+
+Successful mutations invalidate related server state. Landlord, tenant and admin listing resources, shared rental panels and catalogs reuse query data. Private cache keys contain a session generation, never the bearer token. Login/account changes and logout cancel/remove private queries and clear mutation data; delayed results and cache setters cannot populate the next session. The cache is in memory only, without browser persistence. Authentication, messages, notifications and provider map-location responses use live requests.
+
+The backend uses cache-aside in `app/services/public_listing_reads.py` with a `PublicCache` protocol and a thread-safe in-memory implementation. Entries contain serialized validated public schemas, never SQLAlchemy instances. Keys include the projection/version, pagination, filters and sort. Identical misses share one loader; unrelated misses can run concurrently. ORM listing, photo, amenity-link, area and moderation changes invalidate after the outer transaction commits, including assistant workflows that defer their commit. A rollback does not invalidate, and an in-flight response from an earlier cache generation cannot repopulate it. Business eligibility checks for saving rooms, enquiries and reports always read the database.
+
+Optional backend settings (defaults require no Azure configuration changes):
+
+```dotenv
+PUBLIC_CACHE_TTL_SECONDS=30
+PUBLIC_CACHE_MAX_ENTRIES=128
+PUBLIC_CACHE_MAX_BYTES=4194304
+```
+
+The byte limit applies to serialized payloads. Oversized responses are served without caching. The original array endpoint remains compatible with older deployed clients and is cached for non-radius reads; new discovery uses the paged endpoint. Private data and authentication are never stored in this public cache.
+
+Each API worker has its own cache. App Service restarts/idle unloading clear it; writes in another worker or direct SQL changes are reflected after TTL expiry. For multiple workers with immediate shared invalidation, replace the protocol implementation with Redis/shared invalidation. This change adds no paid service, migration or background worker. Existing workflows remain usable. During a frontend-first rollout against an older backend, discovery temporarily falls back to a cached legacy array and pages/filters it locally; normal validation/server failures are not swallowed. Deploying the additive backend first avoids this temporary full-collection compatibility read. Once the backend is updated, subsequent query refreshes use SQL pagination.
+
+Application INFO logs include `public_cache` hit/miss/invalidation events and `api_performance` route-template, status, duration and statement/SELECT counts. They omit SQL text, parameters, bearer tokens, search terms, coordinates and user IDs. SQLAlchemy parameter display is disabled. To see these application records under Uvicorn, configure application loggers/handlers at INFO; `--log-level info` alone may only configure Uvicorn's own loggers.
+
+Reproduce query counts with synthetic in-memory SQLite data (24 rooms: 12 approved, six unapproved active, six drafts; six saved rooms):
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m pytest -q -s -p no:cacheprovider tests/test_public_listing_reads.py -k query_count_comparison
+```
+
+| Operation | Before SELECTs | After cold read | After cache hit |
+| --- | --- | --- | --- |
+| Public discovery | 4, returning all 12 eligible rooms | 3, returning 8 rooms | 0 |
+| Room details | 4 | 3 | 0 |
+| Six saved rooms | 25 | 4 | Private response not in server cache |
+
+These counts exclude authentication and connection health checks and do not measure Neon latency. Browser tests assert one listing-page request across list/map/filter-panel interactions and return navigation, one detail request across repeated visits, and one search request for rapid typing. Cold visitors still make HTTP requests; repeat visitors hitting a warm API cache avoid listing SQL queries.
+
+No index migration is included. The eligible-room query uses a latest-moderation scalar subquery, and cover photos/amenities are batched. Candidate PostgreSQL indexes to evaluate with representative `EXPLAIN (ANALYZE, BUFFERS)` plans are moderation `(listing_id, decided_at DESC, moderation_id DESC)`, photos `(listing_id, photo_id)`, and a partial listing index on `(created_at DESC, listing_id DESC)` for active/available rooms. Confirm existing Neon indexes and actual plans before adding overlapping indexes; synthetic SQLite counts cannot establish PostgreSQL index needs.

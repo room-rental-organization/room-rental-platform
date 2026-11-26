@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 import math
 
-from app.models.listing import Listing
+from app.models.listing import Listing, ListingPhoto
 from app.repositories.listing_repository import ListingRepository
 from app.schemas.listing import (
     PublicListingResponse,
@@ -159,8 +159,19 @@ class ListingService:
         listing: Listing,
         *,
         resolved_location: tuple[float, float] | None = None,
+        cover_photos: list[ListingPhoto] | None = None,
     ) -> PublicListingResponse:
-        response = PublicListingResponse.model_validate(listing)
+        if cover_photos is None:
+            response = PublicListingResponse.model_validate(listing)
+        else:
+            # Explicit projection avoids both loading the complete photo collection
+            # and partially populating an ORM relationship in the identity map.
+            values = {name: getattr(listing, name) for name in PublicListingResponse.model_fields
+                      if name not in {'photos', 'amenities', 'area_name', 'has_map_location',
+                                      'approximate_latitude', 'approximate_longitude'}}
+            response = PublicListingResponse.model_validate({**values,
+                'area_name': listing.area.name, 'amenities': listing.amenity_names,
+                'photos': cover_photos})
         if resolved_location is not None:
             latitude, longitude = resolved_location
             return response.model_copy(

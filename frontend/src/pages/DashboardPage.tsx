@@ -1,3 +1,4 @@
+import { useResourceState } from "../queries/resources";
 import { useEffect, useState } from "react";
 
 import {
@@ -5,10 +6,6 @@ import {
   createReview,
   deleteSavedListing,
   deleteSavedSearch,
-  getMyContactRequests,
-  getMyReviews,
-  getMySavedListings,
-  getMySavedSearches,
   updateSavedSearchAlerts,
   type ContactRequest,
   type Review,
@@ -118,13 +115,31 @@ export default function DashboardPage({
   useEffect(() => {
     setActiveView(["overview", "saved", "enquiries", "future"].includes(view) ? view : "overview");
   }, [view]);
+  const contactRequestsQuery = useResourceState<ContactRequest[]>("/users/me/contact-requests", accessToken, [],
+    role === "tenant" && activeView !== "future");
+  const contactRequests = contactRequestsQuery.data;
+  const setContactRequests = contactRequestsQuery.setData;
+  const isLoadingContactRequests = contactRequestsQuery.isPending;
+  const contactRequestsError = contactRequestsQuery.error?.message ?? null;
+  const reviewsQuery = useResourceState<Review[]>("/users/me/reviews", accessToken, [],
+    role === "tenant" && (activeView === "overview" || activeView === "enquiries"));
+  const reviews = reviewsQuery.data;
+  const setReviews = reviewsQuery.setData;
+  const isLoadingReviews = reviewsQuery.isPending;
+  const reviewsError = reviewsQuery.error?.message ?? null;
+  const savedListingsQuery = useResourceState<Listing[]>("/users/me/saved-listings", accessToken, [],
+    role === "tenant" && (activeView === "overview" || activeView === "saved"));
+  const savedListings = savedListingsQuery.data;
+  const setSavedListings = savedListingsQuery.setData;
+  const isLoadingSavedListings = savedListingsQuery.isPending;
+  const savedListingsError = savedListingsQuery.error?.message ?? null;
+  const savedSearchesQuery = useResourceState<SavedSearch[]>("/users/me/saved-searches", accessToken, [],
+    role === "tenant" && (activeView === "overview" || activeView === "saved"));
+  const savedSearches = savedSearchesQuery.data;
+  const setSavedSearches = savedSearchesQuery.setData;
+  const isLoadingSavedSearches = savedSearchesQuery.isPending;
+  const savedSearchesError = savedSearchesQuery.error?.message ?? null;
   const [rentalInterestRefreshKey, setRentalInterestRefreshKey] = useState(0);
-  const [contactRequests, setContactRequests] = useState<ContactRequest[]>([]);
-  const [contactRequestsError, setContactRequestsError] = useState<
-    string | null
-  >(null);
-  const [isLoadingContactRequests, setIsLoadingContactRequests] =
-    useState(true);
   const [updatingRequestId, setUpdatingRequestId] = useState<number | null>(
     null,
   );
@@ -134,9 +149,6 @@ export default function DashboardPage({
   const [contactRequestActionNotice, setContactRequestActionNotice] = useState<
     string | null
   >(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [reviewsError, setReviewsError] = useState<string | null>(null);
-  const [isLoadingReviews, setIsLoadingReviews] = useState(true);
   const [reviewContactRequestId, setReviewContactRequestId] = useState<
     number | null
   >(null);
@@ -149,176 +161,18 @@ export default function DashboardPage({
   const [reviewActionNotice, setReviewActionNotice] = useState<string | null>(
     null,
   );
-  const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
-  const [savedSearchesError, setSavedSearchesError] = useState<string | null>(
-    null,
-  );
-  const [isLoadingSavedSearches, setIsLoadingSavedSearches] = useState(true);
   const [deletingSavedSearchId, setDeletingSavedSearchId] = useState<
     number | null
   >(null);
   const [savedSearchActionError, setSavedSearchActionError] = useState<
     string | null
   >(null);
-  const [savedListings, setSavedListings] = useState<Listing[]>([]);
-  const [savedListingsError, setSavedListingsError] = useState<string | null>(
-    null,
-  );
-  const [isLoadingSavedListings, setIsLoadingSavedListings] = useState(true);
   const [deletingSavedListingId, setDeletingSavedListingId] = useState<
     number | null
   >(null);
   const [updatingAlertSearchId, setUpdatingAlertSearchId] = useState<
     number | null
   >(null);
-
-  useEffect(() => {
-    if (role !== "tenant") {
-      return;
-    }
-
-    let active = true;
-    setContactRequests([]);
-    setContactRequestsError(null);
-    setIsLoadingContactRequests(true);
-
-    async function loadContactRequests(): Promise<void> {
-      try {
-        const requests = await getMyContactRequests(accessToken);
-        if (active) {
-          setContactRequests(requests);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setContactRequestsError(
-            error instanceof Error
-              ? error.message
-              : "Your contact requests could not be loaded.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsLoadingContactRequests(false);
-        }
-      }
-    }
-
-    void loadContactRequests();
-    return () => {
-      active = false;
-    };
-  }, [accessToken, role]);
-
-  useEffect(() => {
-    if (role !== "tenant") {
-      return;
-    }
-
-    let active = true;
-    setSavedListings([]);
-    setSavedListingsError(null);
-    setIsLoadingSavedListings(true);
-
-    async function loadSavedListings(): Promise<void> {
-      try {
-        const listings = await getMySavedListings(accessToken);
-        if (active) {
-          setSavedListings(listings);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setSavedListingsError(
-            error instanceof Error
-              ? error.message
-              : "Your saved listings could not be loaded.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsLoadingSavedListings(false);
-        }
-      }
-    }
-
-    void loadSavedListings();
-    return () => {
-      active = false;
-    };
-  }, [accessToken, role]);
-
-  useEffect(() => {
-    if (role !== "tenant") {
-      return;
-    }
-
-    let active = true;
-    setReviews([]);
-    setReviewsError(null);
-    setIsLoadingReviews(true);
-
-    async function loadReviews(): Promise<void> {
-      try {
-        const tenantReviews = await getMyReviews(accessToken);
-        if (active) {
-          setReviews(tenantReviews);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setReviewsError(
-            error instanceof Error
-              ? error.message
-              : "Your reviews could not be loaded.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsLoadingReviews(false);
-        }
-      }
-    }
-
-    void loadReviews();
-    return () => {
-      active = false;
-    };
-  }, [accessToken, role]);
-
-  useEffect(() => {
-    if (role !== "tenant") {
-      return;
-    }
-
-    let active = true;
-    setSavedSearches([]);
-    setSavedSearchesError(null);
-    setIsLoadingSavedSearches(true);
-
-    async function loadSavedSearches(): Promise<void> {
-      try {
-        const searches = await getMySavedSearches(accessToken);
-        if (active) {
-          setSavedSearches(searches);
-        }
-      } catch (error: unknown) {
-        if (active) {
-          setSavedSearchesError(
-            error instanceof Error
-              ? error.message
-              : "Your saved searches could not be loaded.",
-          );
-        }
-      } finally {
-        if (active) {
-          setIsLoadingSavedSearches(false);
-        }
-      }
-    }
-
-    void loadSavedSearches();
-    return () => {
-      active = false;
-    };
-  }, [accessToken, role]);
 
   async function handleCancelContactRequest(
     requestId: number,

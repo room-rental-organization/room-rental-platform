@@ -1,10 +1,12 @@
 from collections.abc import Sequence
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from app.models.listing import Listing, ListingPhoto
 from app.models.listing_moderation import ListingModeration
+from app.models.area import Area
+from app.models.amenity import Amenity
 
 
 class ListingRepository:
@@ -18,6 +20,11 @@ class ListingRepository:
             .order_by(Listing.created_at.desc(), Listing.listing_id.desc())
         )
         return list(self._db.scalars(statement).all())
+
+    def dashboard_rows(self, landlord_id: int):
+        return self._db.execute(select(
+            Listing.listing_id, Listing.status, Listing.availability_status,
+        ).where(Listing.landlord_id == landlord_id)).all()
 
     def get_owned(
         self,
@@ -44,6 +51,61 @@ class ListingRepository:
             Listing.listing_id.desc(),
         )
         return list(self._db.scalars(statement).all())
+
+    @staticmethod
+    def public_statement():
+        latest = (
+            select(ListingModeration.decision)
+            .where(ListingModeration.listing_id == Listing.listing_id)
+            .order_by(ListingModeration.decided_at.desc(), ListingModeration.moderation_id.desc())
+            .limit(1).correlate(Listing).scalar_subquery()
+        )
+        return select(Listing).where(
+            Listing.status == 'active', Listing.availability_status == 'available',
+            latest == 'approved',
+        )
+
+    def public_page(self, *, offset=0, limit=8, search='', room_type='',
+                    minimum_rent=None, maximum_rent=None, amenities=(), available_by=None,
+                    sort='recent') -> list[Listing]:
+        statement = self.public_statement()
+        if search:
+            # Treat input as literal text; wildcard input must not broaden the query.
+            pattern = '%' + search.replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
+            statement = statement.where(
+                Listing.address.ilike(pattern, escape='!') |
+                Listing.title.ilike(pattern, escape='!') |
+                Listing.area.has(Area.name.ilike(pattern, escape='!')))
+        if room_type:
+            statement = statement.where(Listing.room_type == room_type)
+        if minimum_rent is not None:
+            statement = statement.where(Listing.monthly_rent >= minimum_rent)
+        if maximum_rent is not None:
+            statement = statement.where(Listing.monthly_rent <= maximum_rent)
+        if available_by is not None:
+            statement = statement.where(Listing.date_available <= available_by)
+        for name in amenities:
+            statement = statement.where(Listing.amenities.any(Amenity.name == name))
+        order = (Listing.monthly_rent.asc(), Listing.listing_id.desc()) if sort == 'rent_asc' else (
+            Listing.created_at.desc(), Listing.listing_id.desc())
+        if limit is None:
+            # Compatibility endpoint still serves the full historical response shape.
+            return list(self._db.scalars(statement.order_by(*order).offset(offset)).all())
+        return list(self._db.scalars(statement.options(lazyload(Listing.photos))
+                                    .order_by(*order).offset(offset).limit(limit)).all())
+
+    def cover_photos(self, ids: Sequence[int]) -> dict[int, ListingPhoto]:
+        if not ids:
+            return {}
+        cover_ids = select(func.min(ListingPhoto.photo_id)).where(
+            ListingPhoto.listing_id.in_(ids)).group_by(ListingPhoto.listing_id)
+        covers = self._db.scalars(select(ListingPhoto).where(ListingPhoto.photo_id.in_(cover_ids))).all()
+        return {photo.listing_id: photo for photo in covers}
+
+    def public_by_ids(self, ids: Sequence[int]) -> list[Listing]:
+        if not ids:
+            return []
+        return list(self._db.scalars(self.public_statement().where(Listing.listing_id.in_(ids))).all())
 
     def get_by_id(self, listing_id: int) -> Listing | None:
         return self._db.get(Listing, listing_id)

@@ -1,3 +1,4 @@
+import { canCacheResource, invalidateAfterMutation, isCurrentQuerySession, queryClient, querySessionGeneration, resourceOptions } from "./queryClient";
 import type {
   Area,
   Amenity,
@@ -339,6 +340,7 @@ export class ApiError extends Error {
     message: string,
     readonly statusCode: number,
     readonly code: string | null = null,
+    readonly detail: unknown = null,
   ) {
     super(message);
     this.name = "ApiError";
@@ -350,6 +352,27 @@ export function buildApiUrl(path: string): string {
 }
 
 export async function requestJson<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const authorization = new Headers(init.headers).get("Authorization");
+  if (method === "GET" && canCacheResource(path)) {
+    if (authorization && !isCurrentQuerySession(authorization)) {
+      throw new ApiError("Your session has changed. Please sign in again.", 401);
+    }
+    return queryClient.fetchQuery({
+      ...resourceOptions(path, authorization),
+      queryFn: (context) => fetchJson<T>(path, { ...init, signal: authorization ? context.signal : undefined }),
+    });
+  }
+  const generation = querySessionGeneration();
+  const result = await fetchJson<T>(path, init);
+  if (method !== "GET") invalidateAfterMutation(path, generation);
+  return result;
+}
+
+export async function fetchJson<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
@@ -374,6 +397,7 @@ export async function requestJson<T>(
       getErrorMessage(body, response.status),
       response.status,
       getErrorCode(body),
+      typeof body === "object" && body !== null && "detail" in body ? body.detail : null,
     );
   }
 
@@ -782,8 +806,9 @@ export function getMySavedListings(accessToken: string): Promise<Listing[]> {
   });
 }
 
-export function getPublicInterestOpportunities(): Promise<InterestOpportunity[]> {
-  return requestJson<InterestOpportunity[]>("/api/v1/interest-opportunities");
+export function getPublicInterestOpportunities(listingId?: number): Promise<InterestOpportunity[]> {
+  return requestJson<InterestOpportunity[]>("/api/v1/interest-opportunities" +
+    (listingId === undefined ? "" : `?listing_id=${listingId}`));
 }
 
 export function getMyInterestOpportunities(

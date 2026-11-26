@@ -10,6 +10,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     database_url: str
+    public_cache_ttl_seconds: float = Field(default=30, gt=0, le=300)
+    public_cache_max_entries: int = Field(default=128, gt=0)
+    public_cache_max_bytes: int = Field(default=4194304, gt=0)
     jwt_secret_key: SecretStr | None = None
     access_token_expire_minutes: int = Field(default=30, gt=0)
     rental_interest_expiry_days: int = Field(default=90, gt=0)
