@@ -570,7 +570,7 @@ export default function ListingDetailsPage({
                         : "Save this room"}
                 </button>
               ) : !isAuthenticated ? (
-                <AppLink href="/login" onNavigate={onNavigate}>
+                <AppLink variant="action" href="/login" onNavigate={onNavigate}>
                   Sign in as a tenant to save this room
                 </AppLink>
               ) : null}
@@ -605,10 +605,9 @@ export default function ListingDetailsPage({
                   </p>
                 ) : (
                   <p>
-                    <AppLink href="/login" onNavigate={onNavigate}>
-                      Sign in as a tenant
-                    </AppLink>{" "}
-                    to request contact.
+                    <AppLink variant="action" href="/login" onNavigate={onNavigate}>
+                      Sign in as a tenant to request contact
+                    </AppLink>
                   </p>
                 )}
                 {contactRequestError !== null && (

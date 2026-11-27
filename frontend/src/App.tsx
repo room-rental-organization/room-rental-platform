@@ -1,5 +1,5 @@
 import { setQuerySession } from "./queryClient";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 
 import {
@@ -23,6 +23,7 @@ import ListingsPage from "./pages/ListingsPage";
 import TenantReportsPage from "./pages/TenantReportsPage";
 import "./App.css";
 import RentalWorkspacePage from "./features/rentals/WorkspacePage";
+import AccountSecurityPage from "./pages/AccountSecurityPage";
 
 type AuthMode = "login" | "register";
 type RegistrationRole = "tenant" | "landlord";
@@ -66,6 +67,7 @@ function getListingReturnPath(): string | null {
 }
 
 function App() {
+  const sessionEpoch = useRef(0);
   const [pathname, setPathname] = useState(window.location.pathname);
   const [search, setSearch] = useState(window.location.search);
   const [mode, setMode] = useState<AuthMode>(
@@ -89,6 +91,7 @@ function App() {
 
   useEffect(() => {
     let isCurrent = true;
+    const epoch = sessionEpoch.current;
 
     async function restoreSession() {
       setIsAuthReady(false);
@@ -99,7 +102,7 @@ function App() {
       try {
         savedToken = window.sessionStorage.getItem(AUTH_TOKEN_STORAGE_KEY);
       } catch {
-        if (isCurrent) {
+        if (isCurrent && epoch === sessionEpoch.current) {
           setSessionRestoreError(
             "Browser session storage is unavailable. Enable it and sign in again.",
           );
@@ -109,7 +112,7 @@ function App() {
       }
 
       if (!savedToken) {
-        if (isCurrent) {
+        if (isCurrent && epoch === sessionEpoch.current) {
           setIsAuthReady(true);
         }
         return;
@@ -118,13 +121,13 @@ function App() {
       try {
         const restoredProfile = await getMyProfile(savedToken);
         getDashboardRole(restoredProfile.roles);
-        if (isCurrent) {
+        if (isCurrent && epoch === sessionEpoch.current) {
           setQuerySession(savedToken);
           setAccessToken(savedToken);
           setProfile(restoredProfile);
         }
       } catch (error: unknown) {
-        if (!isCurrent) {
+        if (!isCurrent || epoch !== sessionEpoch.current) {
           return;
         }
 
@@ -145,7 +148,7 @@ function App() {
           );
         }
       } finally {
-        if (isCurrent) {
+        if (isCurrent && epoch === sessionEpoch.current) {
           setIsAuthReady(true);
         }
       }
@@ -238,20 +241,19 @@ function App() {
           ...emptyForm,
           email: currentFields.email,
         }));
-        navigate(
-          returnPath === null
-            ? "/login"
-            : `/login?returnTo=${encodeURIComponent(returnPath)}`,
-        );
-        setNotice("Your account is ready. Sign in with your new credentials.");
+        navigate(returnPath === null ? "/verify-email" : `/verify-email?returnTo=${encodeURIComponent(returnPath)}`);
+        setNotice("Check your email to verify your new account before signing in.");
         return;
       }
 
+      const loginEpoch = sessionEpoch.current;
       const tokenResponse = await login({
         email: fields.email,
         password: fields.password,
       });
       const currentProfile = await getMyProfile(tokenResponse.access_token);
+      if (loginEpoch !== sessionEpoch.current) return;
+      sessionEpoch.current += 1;
       const dashboardRole = getDashboardRole(currentProfile.roles);
       window.sessionStorage.setItem(
         AUTH_TOKEN_STORAGE_KEY,
@@ -259,6 +261,7 @@ function App() {
       );
       setQuerySession(tokenResponse.access_token);
       setAccessToken(tokenResponse.access_token);
+      setIsAuthReady(true);
       setProfile(currentProfile);
       setFields(emptyForm);
       setShowPassword(false);
@@ -271,6 +274,11 @@ function App() {
           : `/${dashboardRole}`,
       );
     } catch (error: unknown) {
+      if (error instanceof ApiError && error.code === "EMAIL_NOT_VERIFIED") {
+        setFields(current => ({ ...current, password: "" }));
+        navigate("/verify-email");
+        return;
+      }
       setErrorMessage(
         error instanceof Error
           ? error.message
@@ -282,6 +290,8 @@ function App() {
   }
 
   function handleSignOut() {
+    sessionEpoch.current += 1;
+    setIsAuthReady(true);
     let storageError: string | null = null;
     try {
       window.sessionStorage.removeItem(AUTH_TOKEN_STORAGE_KEY);
@@ -305,6 +315,15 @@ function App() {
     setSessionRestoreError(null);
     setSessionNotice(null);
     setRestoreAttempt((attempt) => attempt + 1);
+  }
+
+  if (pathname === "/verify-email" || pathname === "/forgot-password" || pathname === "/reset-password") {
+    return <AccountSecurityPage key={`${pathname}-${search}`} path={pathname} initialEmail={fields.email}
+      onNavigate={navigate} onPasswordReset={() => {
+        handleSignOut();
+        navigate("/login");
+        setNotice("Your password has changed. Sign in with your new password.");
+      }} />;
   }
 
   const listingMatch = pathname.match(/^\/listings\/(\d+)\/?$/);
@@ -604,6 +623,7 @@ function App() {
               value={fields.email}
             />
           </label>
+          {!isRegistering && <AppLink href="/forgot-password" onNavigate={navigate}>Forgot password?</AppLink>}
           <label>
             Password
             <input

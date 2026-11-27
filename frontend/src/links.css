@@ -1,0 +1,60 @@
+/* Link foundations have zero specificity so existing navigation, image links
+   and button treatments keep their intended colours and layout. */
+:where(a[href]) {
+  color: var(--green, #22634b);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .23em;
+  text-decoration-color: #9bb3a3;
+  text-decoration-skip-ink: auto;
+  transition: color .15s ease, text-decoration-color .15s ease, background-color .15s ease, border-color .15s ease;
+}
+:where(a[href]:visited) { color: var(--green, #22634b); }
+:where(a[href]:hover) { color: var(--green-dark, #153f31); text-decoration-color: currentColor; }
+
+.text-link {
+  color: var(--green, #22634b);
+  font-weight: 650;
+  text-decoration-line: underline;
+  text-decoration-color: #9bb3a3;
+  text-decoration-thickness: 1px;
+  text-underline-offset: .23em;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.text-link:visited { color: var(--green, #22634b); }
+.text-link:hover { color: var(--green-dark, #153f31); text-decoration-color: currentColor; }
+.text-link:active { color: #0e3928; }
+.text-link:focus-visible { outline: 3px solid #b8cda7; outline-offset: 4px; text-decoration-color: currentColor; }
+.text-link--subtle { font-weight: 500; font-size: inherit; }
+
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  vertical-align: middle;
+  gap: 16px;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 11px 16px;
+  border: 1px solid #d6e3d2;
+  border-radius: 10px;
+  background: #f0f6ec;
+  color: #24553c;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-decoration: none;
+}
+.action-link:visited { color: #24553c; }
+.action-link:hover { color: #153f31; background: #e4efdc; border-color: #a8c197; }
+.action-link:active { background: #d9e7cf; }
+.action-link:focus-visible { outline: 3px solid #aec79b; outline-offset: 3px; }
+.action-link > span { min-width: 0; overflow-wrap: anywhere; }
+.action-link-icon { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.room-card h2 a:hover { text-decoration: underline; }
+.text-button { border-radius: 7px; text-decoration: none; }
+.text-button:hover:not(:disabled) { color: var(--green-dark, #153f31); background-color: var(--soft, #eff4ee); }
+
+@media (prefers-reduced-motion: reduce) {
+  :where(a[href]) { transition: none; }
+}

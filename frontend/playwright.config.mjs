@@ -34,6 +34,12 @@ export default defineConfig({
   },
   webServer: [
     {
+      command: `"${path.join(backend, python)}" tests/serve_test_mail.py`,
+      cwd: backend,
+      url: "http://127.0.0.1:8026/health",
+      reuseExistingServer: false,
+    },
+    {
       command: `"${path.join(backend, python)}" -m uvicorn app.main:app --host 127.0.0.1 --port 8017`,
       cwd: backend,
       url: "http://127.0.0.1:8017/health",
@@ -42,6 +48,14 @@ export default defineConfig({
         DATABASE_URL: database,
         JWT_SECRET_KEY: "local-browser-test-signing-key-only-20261125",
         CORS_ALLOWED_ORIGINS: "http://127.0.0.1:5187",
+        SMTP_HOST: "127.0.0.1",
+        SMTP_PORT: "8025",
+        SMTP_SECURITY: "plain",
+        SMTP_USERNAME: "",
+        SMTP_PASSWORD: "",
+        SMTP_FROM_EMAIL: "noreply@example.com",
+        FRONTEND_PUBLIC_URL: "http://127.0.0.1:5187",
+        AUTH_RATE_LIMIT_ENABLED: "false",
       },
     },
     {

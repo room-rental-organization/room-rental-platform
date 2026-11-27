@@ -56,3 +56,19 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int = Field(gt=0)
+
+
+class AccountEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class AccountTokenRequest(BaseModel):
+    token: str = Field(min_length=32, max_length=256, pattern=r'^[A-Za-z0-9_-]+$')
+
+
+class PasswordResetRequest(AccountTokenRequest):
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+
+class AccountActionResponse(BaseModel):
+    message: str

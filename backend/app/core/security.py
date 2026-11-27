@@ -31,7 +31,7 @@ def verify_password(password: str, hashed_password: str) -> bool:
     return _password_hash.verify(password, hashed_password)
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, auth_version: int = 0) -> str:
     if user_id <= 0:
         raise ValueError("user_id must be a positive integer.")
 
@@ -43,11 +43,17 @@ def create_access_token(user_id: int) -> str:
         "sub": str(user_id),
         "iat": now,
         "exp": expires_at,
+        "ver": auth_version,
     }
     return jwt.encode(claims, _get_jwt_secret(), algorithm=_jwt_algorithm)
 
 
 def decode_access_token(token: str) -> int | None:
+    claims = decode_access_claims(token)
+    return claims[0] if claims is not None else None
+
+
+def decode_access_claims(token: str) -> tuple[int, int] | None:
     try:
         claims = jwt.decode(
             token,
@@ -67,4 +73,7 @@ def decode_access_token(token: str) -> int | None:
     except ValueError:
         return None
 
-    return user_id if user_id > 0 else None
+    version = claims.get('ver', 0)  # Pre-migration tokens belong to version zero.
+    if type(version) is not int or version < 0:
+        return None
+    return (user_id, version) if user_id > 0 else None

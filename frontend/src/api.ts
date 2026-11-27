@@ -404,6 +404,18 @@ export async function fetchJson<T>(
   return body as T;
 }
 
+export function requestAccountEmail(email: string, purpose: "verification" | "reset") {
+  return requestJson<{ message: string }>(`/api/v1/auth/${purpose === "verification" ? "resend-verification" : "forgot-password"}`, {
+    method: "POST", body: JSON.stringify({ email }),
+  });
+}
+
+export function completeAccountLink(token: string, password?: string) {
+  return requestJson<{ message: string }>(`/api/v1/auth/${password === undefined ? "verify-email" : "reset-password"}`, {
+    method: "POST", body: JSON.stringify({ token, ...(password === undefined ? {} : { password }) }),
+  });
+}
+
 function getErrorMessage(body: unknown, statusCode: number): string {
   if (typeof body === "object" && body !== null && "detail" in body) {
     const detail = body.detail;

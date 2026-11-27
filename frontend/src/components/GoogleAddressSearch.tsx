@@ -171,6 +171,7 @@ export default function GoogleAddressSearch({
       <small>
         Address searches are processed by Google Maps Platform.{" "}
         <a
+          className="text-link text-link--subtle"
           href="https://policies.google.com/privacy"
           rel="noreferrer"
           target="_blank"

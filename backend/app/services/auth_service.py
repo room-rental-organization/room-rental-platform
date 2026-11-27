@@ -49,6 +49,7 @@ class AuthService:
             email=email,
             password_hash=hash_password(request.password.get_secret_value()),
             business_name=request.business_name,
+            email_verification_required=True,
         )
 
         try:

@@ -48,7 +48,7 @@ export default function ListingCard({ listing, onNavigate }: ListingCardProps) {
       <div className="room-card-body">
         <p className="room-card-location">{listing.area_name ?? listing.address}</p>
         <h2 id={`listing-${listing.listing_id}`}>
-          <AppLink href={`/listings/${listing.listing_id}`} onNavigate={onNavigate}>
+          <AppLink variant="plain" href={`/listings/${listing.listing_id}`} onNavigate={onNavigate}>
             {listing.title}
           </AppLink>
         </h2>

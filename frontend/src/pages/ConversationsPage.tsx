@@ -506,7 +506,7 @@ export default function ConversationsPage({
                     Send a contact request for a room to start a conversation
                     with its landlord.
                   </p>
-                  <AppLink href="/" onNavigate={onNavigate}>
+                  <AppLink variant="action" href="/" onNavigate={onNavigate}>
                     Browse rooms
                   </AppLink>
                 </div>

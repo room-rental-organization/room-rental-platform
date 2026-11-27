@@ -17,6 +17,11 @@ from app.services.user_service import UserService
 
 class AuthEndpointTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.email_settings = patch('app.api.v1.endpoints.auth.get_settings', return_value=Mock(
+            smtp_host='smtp.example.com', smtp_from_email='noreply@example.com',
+            smtp_username=None, access_token_expire_minutes=30))
+        self.email_settings.start()
+        self.addCleanup(self.email_settings.stop)
         self.app = FastAPI()
         self.app.include_router(api_router)
         self.app.dependency_overrides[get_db] = lambda: Mock()
@@ -35,7 +40,7 @@ class AuthEndpointTests(unittest.TestCase):
         self.app.dependency_overrides.clear()
 
     def test_registration_returns_safe_profile_with_selected_role(self) -> None:
-        with patch.object(AuthService, "register", return_value=self.user) as register:
+        with patch.object(AuthService, "register", return_value=self.user) as register, patch('app.api.v1.endpoints.auth.deliver_account_link'):
             response = self.client.post(
                 "/api/v1/auth/register",
                 json={

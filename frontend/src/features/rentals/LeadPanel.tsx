@@ -122,11 +122,12 @@ function LeadRecord({
         <p>Outcome reason: {lead.unsuccessful_reason}</p>
       )}
       <div className="rental-actions">
-        <AppLink href={`/listings/${lead.listing_id}`} onNavigate={onNavigate}>
+        <AppLink variant="action" href={`/listings/${lead.listing_id}`} onNavigate={onNavigate}>
           View room
         </AppLink>
         {role !== "admin" && (
           <AppLink
+            variant="action"
             href={`/conversations?request=${lead.contact_request_id}`}
             onNavigate={onNavigate}
           >

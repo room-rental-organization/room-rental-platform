@@ -155,6 +155,7 @@ export default function ListingResultsMap({
         content.append(rent);
 
         const link = document.createElement("a");
+        link.className = "text-link";
         const path = `/listings/${listing.listingId}`;
         link.href = path;
         link.textContent = "View details";

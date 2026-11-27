@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Identity, String, UniqueConstraint, func
+from sqlalchemy import BigInteger, Boolean, Identity, Integer, String, UniqueConstraint, func, false
 from sqlalchemy.dialects.postgresql import TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,6 +24,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     business_name: Mapped[str | None] = mapped_column(String(150))
+    email_verified_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True))
+    email_verification_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    auth_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default='0')
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         nullable=False,

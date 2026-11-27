@@ -6,6 +6,7 @@ import { queryClient } from "./queryClient";
 import App from "./App";
 import "./index.css";
 import "./modern.css";
+import "./links.css";
 
 const rootElement = document.getElementById("root");
 if (rootElement === null) {

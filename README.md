@@ -42,6 +42,28 @@ Availability is separate from moderation and lead outcomes. Recording a rental d
 
 ## Checks
 
+### Email verification and forgotten passwords
+
+New registrations require email verification before login. Existing accounts retain login access during this migration; they are not falsely marked as email-verified. Users can request verification again at `/verify-email`, request recovery at `/forgot-password`, and choose a new password using the emailed `/reset-password` link. Verification requires a deliberate button click so email scanners do not consume links merely by opening them. Password resets invalidate all older access tokens and do not automatically sign the user in or bypass a new account's verification requirement.
+
+Before deploying this feature, configure the backend's SMTP settings and apply migration `20261127_26` to the intended database from its existing `20261124_25` revision. Deploy the backend and frontend together after the migration. Do not point a local migration command at production inadvertently. The commands below use whichever database your backend environment selects:
+
+```powershell
+Set-Location backend
+.\.venv\Scripts\python.exe -m alembic current
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Set `FRONTEND_PUBLIC_URL` to the actual HTTPS frontend origin, for example `https://your-app.azurestaticapps.net`. This is a fixed trusted setting; request Host headers and user-provided return URLs never determine email link destinations. Configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_FROM_EMAIL`, and your provider's `SMTP_USERNAME`/`SMTP_PASSWORD`. Use `starttls` with port 587 or `ssl` with port 465 as required by the provider. Plain SMTP is permitted only for an explicitly configured localhost test server. Keep these credentials in backend/Azure settings, never `VITE_*` variables or Git. Registration returns 503 before creating an account when the basic SMTP configuration is missing. The sender domain/address must be authorized by your email provider.
+
+Link secrets are cryptographically random and only their SHA-256 hashes are stored. Verification links expire after 60 minutes and password reset links after 30 minutes, configurable by the matching `*_EXPIRE_MINUTES` settings. Completion is atomic and single-use, and also invalidates other links for the same account/purpose. A resend does not invalidate a previously delivered link. Tokens are carried in URL fragments, removed from browser history on capture, and submitted only in POST bodies. They are never returned by the API or included in application logs.
+
+Recovery/resend responses are deliberately generic for known and unknown accounts. Delivery runs in a background task with its own database session, outside the response path. The task is best effort: provider failures log `account_email_delivery_failed` without the address, credentials or token; monitor this event and SMTP-provider delivery reports. Users can request another email after the cooldown. Pending background work does not survive process shutdown; this implementation does not claim durable email retries.
+
+Email issuance has database-backed limits of one link per account/purpose per minute and five per hour. Login, registration, link requests and completion also have bounded process-local request limits, enabled by `AUTH_RATE_LIMIT_ENABLED=true`. They use the direct peer address and hashed account identifiers, without trusting arbitrary forwarding headers. For deployments with multiple processes or a shared proxy, evaluate coordinated edge limits rather than relying exclusively on the per-process limiter. Existing access tokens without a version claim remain valid only while the account's auth version is zero; resetting a password increments that version.
+
+Browser tests start a local SMTP capture server on port 8025 and its test-only mailbox on 8026. These fixtures are excluded from the backend deployment artifact and never send real emails. The business-workflow browser server explicitly disables request throttling; dedicated backend tests exercise the limiter. No production SMTP credentials are used by the browser tests.
+
 ```powershell
 Set-Location frontend
 npm run build
